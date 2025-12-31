@@ -31,6 +31,7 @@ export async function getReservations() {
     return result.rows.map(row => ({
       id: row.id,
       guestName: row.guest_name,
+      guestPhone: row.guest_phone || '',
       checkIn: row.check_in,
       checkOut: row.check_out,
       guests: row.guests,
@@ -48,10 +49,11 @@ export async function addReservation(reservation) {
   if (!client) throw new Error('Database client not initialized');
   try {
     const result = await client.execute({
-      sql: `INSERT INTO reservations (guest_name, check_in, check_out, guests, price_per_night, nights, total_price)
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO reservations (guest_name, guest_phone, check_in, check_out, guests, price_per_night, nights, total_price)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         reservation.guestName,
+        reservation.guestPhone || '',
         reservation.checkIn,
         reservation.checkOut,
         reservation.guests,
@@ -72,10 +74,11 @@ export async function updateReservation(id, reservation) {
   try {
     await client.execute({
       sql: `UPDATE reservations
-            SET guest_name = ?, check_in = ?, check_out = ?, guests = ?, price_per_night = ?, nights = ?, total_price = ?
+            SET guest_name = ?, guest_phone = ?, check_in = ?, check_out = ?, guests = ?, price_per_night = ?, nights = ?, total_price = ?
             WHERE id = ?`,
       args: [
         reservation.guestName,
+        reservation.guestPhone || '',
         reservation.checkIn,
         reservation.checkOut,
         reservation.guests,

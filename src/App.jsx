@@ -5,7 +5,7 @@ import {
 import {
   Calendar, Users, DollarSign, TrendingUp, LogOut, Plus, Edit2, Trash2, X, Check,
   Wrench, Zap, Sparkles, Waves, Package, MoreHorizontal, Mail, ArrowRight, Home, Loader2,
-  Download, FileSpreadsheet, Image
+  Download, FileSpreadsheet, Image, Phone
 } from 'lucide-react'
 import * as db from './db'
 
@@ -51,6 +51,7 @@ function App() {
   // Reservation form
   const [reservationForm, setReservationForm] = useState({
     guestName: '',
+    guestPhone: '',
     checkIn: '',
     checkOut: '',
     guests: 1,
@@ -141,6 +142,7 @@ function App() {
   const resetReservationForm = () => {
     setReservationForm({
       guestName: '',
+      guestPhone: '',
       checkIn: '',
       checkOut: '',
       guests: 1,
@@ -159,6 +161,7 @@ function App() {
     try {
       const reservationData = {
         guestName: reservationForm.guestName,
+        guestPhone: reservationForm.guestPhone,
         checkIn: reservationForm.checkIn,
         checkOut: reservationForm.checkOut,
         guests: Number(reservationForm.guests),
@@ -190,6 +193,7 @@ function App() {
   const handleEditReservation = (reservation) => {
     setReservationForm({
       guestName: reservation.guestName,
+      guestPhone: reservation.guestPhone || '',
       checkIn: reservation.checkIn,
       checkOut: reservation.checkOut,
       guests: reservation.guests,
@@ -339,6 +343,7 @@ function App() {
   const exportReservations = () => {
     const data = reservations.map(r => ({
       guestname: r.guestName,
+      phone: r.guestPhone || '',
       checkin: r.checkIn,
       checkout: r.checkOut,
       guests: r.guests,
@@ -346,7 +351,7 @@ function App() {
       nights: r.nights,
       totalprice: r.totalPrice
     }))
-    exportToCSV(data, 'reservations.csv', ['GuestName', 'CheckIn', 'CheckOut', 'Guests', 'PricePerNight', 'Nights', 'TotalPrice'])
+    exportToCSV(data, 'reservations.csv', ['GuestName', 'Phone', 'CheckIn', 'CheckOut', 'Guests', 'PricePerNight', 'Nights', 'TotalPrice'])
   }
 
   const exportExpenses = () => {
@@ -380,8 +385,8 @@ function App() {
       `Net Profit: $${netProfit.toLocaleString()}`,
       '',
       '--- RESERVATIONS ---',
-      'Guest Name,Check-In,Check-Out,Guests,Price/Night,Nights,Total',
-      ...reservations.map(r => `${r.guestName},${r.checkIn},${r.checkOut},${r.guests},$${r.pricePerNight},${r.nights},$${r.totalPrice}`),
+      'Guest Name,Phone,Check-In,Check-Out,Guests,Price/Night,Nights,Total',
+      ...reservations.map(r => `${r.guestName},${r.guestPhone || ''},${r.checkIn},${r.checkOut},${r.guests},$${r.pricePerNight},${r.nights},$${r.totalPrice}`),
       '',
       '--- EXPENSES ---',
       'Description,Amount,Date,Category',
@@ -602,6 +607,16 @@ function App() {
                     />
                   </div>
                   <div>
+                    <label className="block text-gray-600 text-sm font-medium mb-2">Phone Number</label>
+                    <input
+                      type="tel"
+                      value={reservationForm.guestPhone}
+                      onChange={(e) => setReservationForm({ ...reservationForm, guestPhone: e.target.value })}
+                      placeholder="+961 XX XXX XXX"
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-gray-600 text-sm font-medium mb-2">Check-in Date <span className="text-blue-500">(8 PM)</span></label>
                     <input
                       type="date"
@@ -704,7 +719,15 @@ function App() {
                           </div>
                           <div className="min-w-0">
                             <h4 className="text-base sm:text-lg font-semibold text-gray-800 truncate">{reservation.guestName}</h4>
-                            <p className="text-xs sm:text-sm text-gray-400">{reservation.guests} guest{reservation.guests > 1 ? 's' : ''}</p>
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                              <p className="text-xs sm:text-sm text-gray-400">{reservation.guests} guest{reservation.guests > 1 ? 's' : ''}</p>
+                              {reservation.guestPhone && (
+                                <a href={`tel:${reservation.guestPhone}`} className="flex items-center gap-1 text-xs sm:text-sm text-blue-500 hover:text-blue-600">
+                                  <Phone className="w-3 h-3" />
+                                  {reservation.guestPhone}
+                                </a>
+                              )}
+                            </div>
                           </div>
                         </div>
                         <div className="flex gap-1.5 sm:gap-2 flex-shrink-0">
