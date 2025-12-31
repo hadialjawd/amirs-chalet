@@ -1,14 +1,31 @@
 import { createClient } from '@libsql/client';
 
-// Initialize Turso client
-const client = createClient({
-  url: import.meta.env.VITE_TURSO_DATABASE_URL,
-  authToken: import.meta.env.VITE_TURSO_AUTH_TOKEN,
-});
+// Initialize Turso client with error handling
+let client = null;
+
+try {
+  const url = import.meta.env.VITE_TURSO_DATABASE_URL;
+  const authToken = import.meta.env.VITE_TURSO_AUTH_TOKEN;
+
+  if (url && authToken) {
+    client = createClient({
+      url,
+      authToken,
+    });
+  } else {
+    console.error('Missing Turso environment variables:', { url: !!url, authToken: !!authToken });
+  }
+} catch (error) {
+  console.error('Failed to initialize Turso client:', error);
+}
 
 // ============ RESERVATIONS ============
 
 export async function getReservations() {
+  if (!client) {
+    console.error('Database client not initialized');
+    return [];
+  }
   try {
     const result = await client.execute('SELECT * FROM reservations ORDER BY check_in DESC');
     return result.rows.map(row => ({
@@ -28,6 +45,7 @@ export async function getReservations() {
 }
 
 export async function addReservation(reservation) {
+  if (!client) throw new Error('Database client not initialized');
   try {
     const result = await client.execute({
       sql: `INSERT INTO reservations (guest_name, check_in, check_out, guests, price_per_night, nights, total_price)
@@ -50,6 +68,7 @@ export async function addReservation(reservation) {
 }
 
 export async function updateReservation(id, reservation) {
+  if (!client) throw new Error('Database client not initialized');
   try {
     await client.execute({
       sql: `UPDATE reservations
@@ -74,6 +93,7 @@ export async function updateReservation(id, reservation) {
 }
 
 export async function deleteReservation(id) {
+  if (!client) throw new Error('Database client not initialized');
   try {
     await client.execute({
       sql: 'DELETE FROM reservations WHERE id = ?',
@@ -89,6 +109,10 @@ export async function deleteReservation(id) {
 // ============ EXPENSES ============
 
 export async function getExpenses() {
+  if (!client) {
+    console.error('Database client not initialized');
+    return [];
+  }
   try {
     const result = await client.execute('SELECT * FROM expenses ORDER BY date DESC');
     return result.rows.map(row => ({
@@ -105,6 +129,7 @@ export async function getExpenses() {
 }
 
 export async function addExpense(expense) {
+  if (!client) throw new Error('Database client not initialized');
   try {
     const result = await client.execute({
       sql: `INSERT INTO expenses (description, amount, date, category) VALUES (?, ?, ?, ?)`,
@@ -118,6 +143,7 @@ export async function addExpense(expense) {
 }
 
 export async function updateExpense(id, expense) {
+  if (!client) throw new Error('Database client not initialized');
   try {
     await client.execute({
       sql: `UPDATE expenses SET description = ?, amount = ?, date = ?, category = ? WHERE id = ?`,
@@ -131,6 +157,7 @@ export async function updateExpense(id, expense) {
 }
 
 export async function deleteExpense(id) {
+  if (!client) throw new Error('Database client not initialized');
   try {
     await client.execute({
       sql: 'DELETE FROM expenses WHERE id = ?',
@@ -146,6 +173,7 @@ export async function deleteExpense(id) {
 // ============ USERS (AUTH) ============
 
 export async function getUser(email) {
+  if (!client) return null;
   try {
     const result = await client.execute({
       sql: 'SELECT * FROM users WHERE email = ?',
@@ -159,6 +187,7 @@ export async function getUser(email) {
 }
 
 export async function createUser(email) {
+  if (!client) throw new Error('Database client not initialized');
   try {
     const result = await client.execute({
       sql: 'INSERT OR IGNORE INTO users (email) VALUES (?)',
