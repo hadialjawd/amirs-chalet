@@ -4,13 +4,12 @@ import {
 } from 'recharts'
 import {
   Calendar, Users, DollarSign, TrendingUp, LogOut, Plus, Edit2, Trash2, X, Check,
-  Wrench, Zap, Sparkles, Waves, Package, MoreHorizontal, Mail, ArrowRight, Home
+  Wrench, Zap, Sparkles, Waves, Package, MoreHorizontal, Mail, ArrowRight, Home, Loader2
 } from 'lucide-react'
+import * as db from './db'
 
 const STORAGE_KEYS = {
-  AUTH: 'amirs-chalet-auth',
-  RESERVATIONS: 'amirs-chalet-reservations',
-  EXPENSES: 'amirs-chalet-expenses'
+  AUTH: 'amirs-chalet-auth'
 }
 
 const EXPENSE_CATEGORIES = [
@@ -33,6 +32,8 @@ function App() {
   const [activeTab, setActiveTab] = useState('reservations')
   const [reservations, setReservations] = useState([])
   const [expenses, setExpenses] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
   // Form state
   const [showReservationForm, setShowReservationForm] = useState(false)
@@ -57,7 +58,7 @@ function App() {
     category: 'maintenance'
   })
 
-  // Load data from localStorage on mount
+  // Load auth from localStorage and data from Turso on mount
   useEffect(() => {
     const auth = localStorage.getItem(STORAGE_KEYS.AUTH)
     if (auth) {
@@ -65,27 +66,30 @@ function App() {
       setIsAuthenticated(true)
       setUserEmail(email)
     }
-
-    const savedReservations = localStorage.getItem(STORAGE_KEYS.RESERVATIONS)
-    if (savedReservations) {
-      setReservations(JSON.parse(savedReservations))
-    }
-
-    const savedExpenses = localStorage.getItem(STORAGE_KEYS.EXPENSES)
-    if (savedExpenses) {
-      setExpenses(JSON.parse(savedExpenses))
-    }
   }, [])
 
-  // Save reservations to localStorage
+  // Load data from Turso when authenticated
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.RESERVATIONS, JSON.stringify(reservations))
-  }, [reservations])
+    if (isAuthenticated) {
+      loadData()
+    }
+  }, [isAuthenticated])
 
-  // Save expenses to localStorage
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses))
-  }, [expenses])
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [reservationsData, expensesData] = await Promise.all([
+        db.getReservations(),
+        db.getExpenses()
+      ])
+      setReservations(reservationsData)
+      setExpenses(expensesData)
+    } catch (error) {
+      console.error('Error loading data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Calculate nights between dates
   const calculateNights = (checkIn, checkOut) => {
@@ -95,12 +99,17 @@ function App() {
   }
 
   // Auth handlers
-  const handleSendMagicLink = (e) => {
+  const handleSendMagicLink = async (e) => {
     e.preventDefault()
     if (loginEmail) {
       setMagicLinkSent(true)
       // Simulate magic link - auto login after 2 seconds
-      setTimeout(() => {
+      setTimeout(async () => {
+        try {
+          await db.createUser(loginEmail)
+        } catch (error) {
+          console.error('Error creating user:', error)
+        }
         localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: loginEmail }))
         setIsAuthenticated(true)
         setUserEmail(loginEmail)
@@ -129,29 +138,41 @@ function App() {
     setShowReservationForm(false)
   }
 
-  const handleSaveReservation = (e) => {
+  const handleSaveReservation = async (e) => {
     e.preventDefault()
+    setSaving(true)
     const nights = calculateNights(reservationForm.checkIn, reservationForm.checkOut)
     const totalPrice = nights * Number(reservationForm.pricePerNight)
 
-    if (editingReservation) {
-      setReservations(reservations.map(r =>
-        r.id === editingReservation.id
-          ? { ...r, ...reservationForm, nights, totalPrice }
-          : r
-      ))
-    } else {
-      const newReservation = {
-        id: Date.now(),
-        ...reservationForm,
+    try {
+      const reservationData = {
+        guestName: reservationForm.guestName,
+        checkIn: reservationForm.checkIn,
+        checkOut: reservationForm.checkOut,
         guests: Number(reservationForm.guests),
         pricePerNight: Number(reservationForm.pricePerNight),
         nights,
         totalPrice
       }
-      setReservations([...reservations, newReservation])
+
+      if (editingReservation) {
+        await db.updateReservation(editingReservation.id, reservationData)
+        setReservations(reservations.map(r =>
+          r.id === editingReservation.id
+            ? { ...r, ...reservationData }
+            : r
+        ))
+      } else {
+        const newReservation = await db.addReservation(reservationData)
+        setReservations([...reservations, newReservation])
+      }
+      resetReservationForm()
+    } catch (error) {
+      console.error('Error saving reservation:', error)
+      alert('Failed to save reservation. Please try again.')
+    } finally {
+      setSaving(false)
     }
-    resetReservationForm()
   }
 
   const handleEditReservation = (reservation) => {
@@ -166,9 +187,15 @@ function App() {
     setShowReservationForm(true)
   }
 
-  const handleDeleteReservation = (id) => {
+  const handleDeleteReservation = async (id) => {
     if (confirm('Are you sure you want to delete this reservation?')) {
-      setReservations(reservations.filter(r => r.id !== id))
+      try {
+        await db.deleteReservation(id)
+        setReservations(reservations.filter(r => r.id !== id))
+      } catch (error) {
+        console.error('Error deleting reservation:', error)
+        alert('Failed to delete reservation. Please try again.')
+      }
     }
   }
 
@@ -184,23 +211,36 @@ function App() {
     setShowExpenseForm(false)
   }
 
-  const handleSaveExpense = (e) => {
+  const handleSaveExpense = async (e) => {
     e.preventDefault()
-    if (editingExpense) {
-      setExpenses(expenses.map(exp =>
-        exp.id === editingExpense.id
-          ? { ...exp, ...expenseForm, amount: Number(expenseForm.amount) }
-          : exp
-      ))
-    } else {
-      const newExpense = {
-        id: Date.now(),
-        ...expenseForm,
-        amount: Number(expenseForm.amount)
+    setSaving(true)
+
+    try {
+      const expenseData = {
+        description: expenseForm.description,
+        amount: Number(expenseForm.amount),
+        date: expenseForm.date,
+        category: expenseForm.category
       }
-      setExpenses([...expenses, newExpense])
+
+      if (editingExpense) {
+        await db.updateExpense(editingExpense.id, expenseData)
+        setExpenses(expenses.map(exp =>
+          exp.id === editingExpense.id
+            ? { ...exp, ...expenseData }
+            : exp
+        ))
+      } else {
+        const newExpense = await db.addExpense(expenseData)
+        setExpenses([...expenses, newExpense])
+      }
+      resetExpenseForm()
+    } catch (error) {
+      console.error('Error saving expense:', error)
+      alert('Failed to save expense. Please try again.')
+    } finally {
+      setSaving(false)
     }
-    resetExpenseForm()
   }
 
   const handleEditExpense = (expense) => {
@@ -214,9 +254,15 @@ function App() {
     setShowExpenseForm(true)
   }
 
-  const handleDeleteExpense = (id) => {
+  const handleDeleteExpense = async (id) => {
     if (confirm('Are you sure you want to delete this expense?')) {
-      setExpenses(expenses.filter(e => e.id !== id))
+      try {
+        await db.deleteExpense(id)
+        setExpenses(expenses.filter(e => e.id !== id))
+      } catch (error) {
+        console.error('Error deleting expense:', error)
+        alert('Failed to delete expense. Please try again.')
+      }
     }
   }
 
@@ -313,6 +359,18 @@ function App() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Loading screen
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-cyan-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading your data...</p>
         </div>
       </div>
     )
@@ -517,10 +575,11 @@ function App() {
                   <div className="sm:col-span-2 lg:col-span-3 flex flex-col sm:flex-row gap-2 sm:gap-3 mt-2">
                     <button
                       type="submit"
-                      className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 text-sm sm:text-base"
+                      disabled={saving}
+                      className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Check className="w-4 h-4 sm:w-5 sm:h-5" />
-                      {editingReservation ? 'Update' : 'Save'}
+                      {saving ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <Check className="w-4 h-4 sm:w-5 sm:h-5" />}
+                      {saving ? 'Saving...' : (editingReservation ? 'Update' : 'Save')}
                     </button>
                     <button
                       type="button"
@@ -673,10 +732,11 @@ function App() {
                   <div className="sm:col-span-2 flex flex-col sm:flex-row gap-2 sm:gap-3 mt-2">
                     <button
                       type="submit"
-                      className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 text-sm sm:text-base"
+                      disabled={saving}
+                      className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Check className="w-4 h-4 sm:w-5 sm:h-5" />
-                      {editingExpense ? 'Update' : 'Save'}
+                      {saving ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <Check className="w-4 h-4 sm:w-5 sm:h-5" />}
+                      {saving ? 'Saving...' : (editingExpense ? 'Update' : 'Save')}
                     </button>
                     <button
                       type="button"
