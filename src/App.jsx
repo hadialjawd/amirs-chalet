@@ -4,13 +4,20 @@ import {
 } from 'recharts'
 import {
   Calendar, Users, DollarSign, TrendingUp, LogOut, Plus, Edit2, Trash2, X, Check,
-  Wrench, Zap, Sparkles, Waves, Package, MoreHorizontal, Mail, ArrowRight, Home, Loader2
+  Wrench, Zap, Sparkles, Waves, Package, MoreHorizontal, Mail, ArrowRight, Home, Loader2,
+  Download, FileSpreadsheet, Image
 } from 'lucide-react'
 import * as db from './db'
 
 const STORAGE_KEYS = {
   AUTH: 'amirs-chalet-auth'
 }
+
+// Allowed emails - only these can access the app
+const ALLOWED_EMAILS = [
+  'hadialjawad237@gmail.com',
+  'amir.chalet@gmail.com'
+]
 
 const EXPENSE_CATEGORIES = [
   { id: 'maintenance', label: 'Maintenance', icon: Wrench },
@@ -27,6 +34,7 @@ function App() {
   const [userEmail, setUserEmail] = useState('')
   const [loginEmail, setLoginEmail] = useState('')
   const [magicLinkSent, setMagicLinkSent] = useState(false)
+  const [authError, setAuthError] = useState('')
 
   // App state
   const [activeTab, setActiveTab] = useState('reservations')
@@ -101,7 +109,16 @@ function App() {
   // Auth handlers
   const handleSendMagicLink = async (e) => {
     e.preventDefault()
+    setAuthError('')
+
     if (loginEmail) {
+      // Check if email is allowed
+      const emailLower = loginEmail.toLowerCase().trim()
+      if (!ALLOWED_EMAILS.map(e => e.toLowerCase()).includes(emailLower)) {
+        setAuthError('Access denied. This email is not authorized.')
+        return
+      }
+
       setMagicLinkSent(true)
       // Simulate magic link - auto login after 2 seconds
       setTimeout(async () => {
@@ -307,6 +324,86 @@ function App() {
     return cat ? cat.label : 'Other'
   }
 
+  // Export functions
+  const exportToCSV = (data, filename, headers) => {
+    const csvContent = [
+      headers.join(','),
+      ...data.map(row => headers.map(h => {
+        const value = row[h.toLowerCase().replace(/ /g, '')] || row[h.toLowerCase()] || ''
+        return typeof value === 'string' && value.includes(',') ? `"${value}"` : value
+      }).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = filename
+    link.click()
+  }
+
+  const exportReservations = () => {
+    const data = reservations.map(r => ({
+      guestname: r.guestName,
+      checkin: r.checkIn,
+      checkout: r.checkOut,
+      guests: r.guests,
+      pricepernight: r.pricePerNight,
+      nights: r.nights,
+      totalprice: r.totalPrice
+    }))
+    exportToCSV(data, 'reservations.csv', ['GuestName', 'CheckIn', 'CheckOut', 'Guests', 'PricePerNight', 'Nights', 'TotalPrice'])
+  }
+
+  const exportExpenses = () => {
+    const data = expenses.map(e => ({
+      description: e.description,
+      amount: e.amount,
+      date: e.date,
+      category: getCategoryLabel(e.category)
+    }))
+    exportToCSV(data, 'expenses.csv', ['Description', 'Amount', 'Date', 'Category'])
+  }
+
+  const exportAnalytics = () => {
+    const data = monthlyData.map(m => ({
+      month: m.month,
+      income: m.income,
+      expenses: m.expenses,
+      profit: m.income - m.expenses
+    }))
+    exportToCSV(data, 'monthly-analytics.csv', ['Month', 'Income', 'Expenses', 'Profit'])
+  }
+
+  const exportFullReport = () => {
+    const report = [
+      '=== AMIR\'S CHALET FINANCIAL REPORT ===',
+      `Generated: ${new Date().toLocaleDateString()}`,
+      '',
+      '--- SUMMARY ---',
+      `Total Income: $${totalIncome.toLocaleString()}`,
+      `Total Expenses: $${totalExpenses.toLocaleString()}`,
+      `Net Profit: $${netProfit.toLocaleString()}`,
+      '',
+      '--- RESERVATIONS ---',
+      'Guest Name,Check-In,Check-Out,Guests,Price/Night,Nights,Total',
+      ...reservations.map(r => `${r.guestName},${r.checkIn},${r.checkOut},${r.guests},$${r.pricePerNight},${r.nights},$${r.totalPrice}`),
+      '',
+      '--- EXPENSES ---',
+      'Description,Amount,Date,Category',
+      ...expenses.map(e => `${e.description},$${e.amount},${e.date},${getCategoryLabel(e.category)}`),
+      '',
+      '--- MONTHLY BREAKDOWN ---',
+      'Month,Income,Expenses,Profit',
+      ...monthlyData.map(m => `${m.month},$${m.income},$${m.expenses},$${m.income - m.expenses}`)
+    ].join('\n')
+
+    const blob = new Blob([report], { type: 'text/plain;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `amirs-chalet-report-${new Date().toISOString().split('T')[0]}.txt`
+    link.click()
+  }
+
   // Login screen
   if (!isAuthenticated) {
     return (
@@ -347,6 +444,11 @@ function App() {
                   Send Magic Link
                   <ArrowRight className="w-5 h-5" />
                 </button>
+                {authError && (
+                  <div className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm text-center">
+                    {authError}
+                  </div>
+                )}
               </form>
             ) : (
               <div className="text-center py-8">
@@ -819,6 +921,38 @@ function App() {
         {/* Analytics Tab */}
         {activeTab === 'analytics' && (
           <div className="space-y-4 sm:space-y-6">
+            {/* Export Buttons */}
+            <div className="flex flex-wrap gap-2 sm:gap-3">
+              <button
+                onClick={exportFullReport}
+                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 text-sm"
+              >
+                <Download className="w-4 h-4" />
+                Full Report
+              </button>
+              <button
+                onClick={exportAnalytics}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-xl shadow-md border border-gray-200 transition-all duration-300 text-sm"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Monthly CSV
+              </button>
+              <button
+                onClick={exportReservations}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-xl shadow-md border border-gray-200 transition-all duration-300 text-sm"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Reservations
+              </button>
+              <button
+                onClick={exportExpenses}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-xl shadow-md border border-gray-200 transition-all duration-300 text-sm"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Expenses
+              </button>
+            </div>
+
             {monthlyData.length === 0 ? (
               <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-8 sm:p-12 text-center">
                 <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-blue-50 mb-4">
