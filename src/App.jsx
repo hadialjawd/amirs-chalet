@@ -33,7 +33,6 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [loginEmail, setLoginEmail] = useState('')
-  const [magicLinkSent, setMagicLinkSent] = useState(false)
   const [authError, setAuthError] = useState('')
 
   // App state
@@ -119,20 +118,16 @@ function App() {
         return
       }
 
-      setMagicLinkSent(true)
-      // Simulate magic link - auto login after 2 seconds
-      setTimeout(async () => {
-        try {
-          await db.createUser(loginEmail)
-        } catch (error) {
-          console.error('Error creating user:', error)
-        }
-        localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: loginEmail }))
-        setIsAuthenticated(true)
-        setUserEmail(loginEmail)
-        setMagicLinkSent(false)
-        setLoginEmail('')
-      }, 2000)
+      // Log in directly (in production, this would send a real magic link email)
+      try {
+        await db.createUser(loginEmail)
+      } catch (error) {
+        console.error('Error creating user:', error)
+      }
+      localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: loginEmail }))
+      setIsAuthenticated(true)
+      setUserEmail(loginEmail)
+      setLoginEmail('')
     }
   }
 
@@ -419,47 +414,36 @@ function App() {
               <p className="text-cyan-300/70 text-sm mt-1">Lebanon 🇱🇧</p>
             </div>
 
-            {!magicLinkSent ? (
-              <form onSubmit={handleSendMagicLink} className="space-y-4">
-                <div>
-                  <label className="block text-cyan-100 text-sm font-medium mb-2">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-cyan-300" />
-                    <input
-                      type="email"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="Enter your email"
-                      className="w-full pl-11 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-cyan-200/50 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
-                      required
-                    />
-                  </div>
+            <form onSubmit={handleSendMagicLink} className="space-y-4">
+              <div>
+                <label className="block text-cyan-100 text-sm font-medium mb-2">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-cyan-300" />
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    className="w-full pl-11 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-cyan-200/50 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
+                    required
+                  />
                 </div>
-                <button
-                  type="submit"
-                  className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2"
-                >
-                  Send Magic Link
-                  <ArrowRight className="w-5 h-5" />
-                </button>
-                {authError && (
-                  <div className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm text-center">
-                    {authError}
-                  </div>
-                )}
-              </form>
-            ) : (
-              <div className="text-center py-8">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/20 mb-4 animate-pulse">
-                  <Mail className="w-8 h-8 text-green-400" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Magic Link Sent!</h3>
-                <p className="text-cyan-200 text-sm">Check your email and click the link to sign in.</p>
-                <p className="text-cyan-300/50 text-xs mt-4">(Demo: Auto-signing in...)</p>
               </div>
-            )}
+              <button
+                type="submit"
+                className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2"
+              >
+                Sign In
+                <ArrowRight className="w-5 h-5" />
+              </button>
+              {authError && (
+                <div className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm text-center">
+                  {authError}
+                </div>
+              )}
+            </form>
           </div>
         </div>
       </div>
@@ -618,7 +602,7 @@ function App() {
                     />
                   </div>
                   <div>
-                    <label className="block text-gray-600 text-sm font-medium mb-2">Check-in Date</label>
+                    <label className="block text-gray-600 text-sm font-medium mb-2">Check-in Date <span className="text-blue-500">(8 PM)</span></label>
                     <input
                       type="date"
                       value={reservationForm.checkIn}
@@ -628,7 +612,7 @@ function App() {
                     />
                   </div>
                   <div>
-                    <label className="block text-gray-600 text-sm font-medium mb-2">Check-out Date</label>
+                    <label className="block text-gray-600 text-sm font-medium mb-2">Check-out Date <span className="text-blue-500">(6 PM)</span></label>
                     <input
                       type="date"
                       value={reservationForm.checkOut}
@@ -743,11 +727,11 @@ function App() {
                           <div className="flex items-center gap-2 text-gray-600">
                             <Calendar className="w-4 h-4 text-blue-400 flex-shrink-0" />
                             <span className="text-xs sm:text-sm">
-                              {new Date(reservation.checkIn).toLocaleDateString()} - {new Date(reservation.checkOut).toLocaleDateString()}
+                              {new Date(reservation.checkIn).toLocaleDateString()} (8 PM) - {new Date(reservation.checkOut).toLocaleDateString()} (6 PM)
                             </span>
                           </div>
                           <div className="text-xs sm:text-sm text-gray-500">
-                            📅 {reservation.nights} night{reservation.nights > 1 ? 's' : ''} @ ${reservation.pricePerNight}/night
+                            🌙 {reservation.nights} night{reservation.nights > 1 ? 's' : ''} @ ${reservation.pricePerNight}/night
                           </div>
                         </div>
                         <div className="flex items-center justify-between sm:justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
