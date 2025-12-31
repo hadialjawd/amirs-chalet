@@ -5,7 +5,7 @@ import {
 import {
   Calendar, Users, DollarSign, TrendingUp, LogOut, Plus, Edit2, Trash2, X, Check,
   Wrench, Zap, Sparkles, Waves, Package, MoreHorizontal, Mail, ArrowRight, Home, Loader2,
-  Download, FileSpreadsheet, Image, Phone
+  Download, FileSpreadsheet, Image, Phone, Receipt
 } from 'lucide-react'
 import * as db from './db'
 
@@ -404,6 +404,171 @@ function App() {
     link.click()
   }
 
+  // Generate printable receipt
+  const generateReceipt = (reservation) => {
+    const receiptWindow = window.open('', '_blank', 'width=400,height=600')
+    const receiptHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Receipt - Amir's Chalet</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            padding: 20px;
+            max-width: 400px;
+            margin: 0 auto;
+            color: #333;
+          }
+          .header {
+            text-align: center;
+            border-bottom: 2px dashed #ccc;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+          }
+          .header h1 {
+            font-size: 24px;
+            color: #0891b2;
+            margin-bottom: 5px;
+          }
+          .header p {
+            font-size: 12px;
+            color: #666;
+          }
+          .receipt-number {
+            background: #f0f9ff;
+            padding: 8px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 12px;
+            color: #0369a1;
+          }
+          .section {
+            margin-bottom: 15px;
+          }
+          .section-title {
+            font-size: 11px;
+            color: #999;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            letter-spacing: 1px;
+          }
+          .section-content {
+            font-size: 14px;
+            font-weight: 500;
+          }
+          .row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+          }
+          .row:last-child { border-bottom: none; }
+          .row .label { color: #666; }
+          .row .value { font-weight: 500; }
+          .total-section {
+            background: linear-gradient(135deg, #0891b2 0%, #0369a1 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+          }
+          .total-section .row { border-bottom: 1px solid rgba(255,255,255,0.2); }
+          .total-section .label { color: rgba(255,255,255,0.8); }
+          .total-section .value { color: white; }
+          .grand-total {
+            font-size: 24px;
+            text-align: center;
+            margin-top: 10px;
+            font-weight: bold;
+          }
+          .footer {
+            text-align: center;
+            margin-top: 25px;
+            padding-top: 15px;
+            border-top: 2px dashed #ccc;
+            font-size: 11px;
+            color: #999;
+          }
+          .footer p { margin-bottom: 5px; }
+          @media print {
+            body { padding: 10px; }
+            .no-print { display: none; }
+          }
+          .print-btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background: #0891b2;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 20px;
+          }
+          .print-btn:hover { background: #0369a1; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Amir's Chalet</h1>
+          <p>Luxury Pool Retreat - Lebanon</p>
+        </div>
+
+        <div class="receipt-number">
+          Receipt #${reservation.id} | ${new Date().toLocaleDateString()}
+        </div>
+
+        <div class="section">
+          <div class="section-title">Guest Information</div>
+          <div class="section-content">${reservation.guestName}</div>
+          ${reservation.guestPhone ? `<div class="section-content" style="font-size:12px;color:#666;margin-top:3px;">${reservation.guestPhone}</div>` : ''}
+        </div>
+
+        <div class="section">
+          <div class="section-title">Stay Details</div>
+          <div class="row">
+            <span class="label">Check-in</span>
+            <span class="value">${new Date(reservation.checkIn).toLocaleDateString()} at 8 PM</span>
+          </div>
+          <div class="row">
+            <span class="label">Check-out</span>
+            <span class="value">${new Date(reservation.checkOut).toLocaleDateString()} at 6 PM</span>
+          </div>
+          <div class="row">
+            <span class="label">Guests</span>
+            <span class="value">${reservation.guests} guest${reservation.guests > 1 ? 's' : ''}</span>
+          </div>
+        </div>
+
+        <div class="total-section">
+          <div class="row">
+            <span class="label">Price per Night</span>
+            <span class="value">$${reservation.pricePerNight}</span>
+          </div>
+          <div class="row">
+            <span class="label">Number of Nights</span>
+            <span class="value">${reservation.nights}</span>
+          </div>
+          <div class="grand-total">$${reservation.totalPrice.toLocaleString()}</div>
+        </div>
+
+        <div class="footer">
+          <p>Thank you for choosing Amir's Chalet!</p>
+          <p>We hope you enjoy your stay</p>
+        </div>
+
+        <button class="print-btn no-print" onclick="window.print()">Print Receipt</button>
+      </body>
+      </html>
+    `
+    receiptWindow.document.write(receiptHTML)
+    receiptWindow.document.close()
+  }
+
   // Login screen
   if (!isAuthenticated) {
     return (
@@ -731,6 +896,13 @@ function App() {
                           </div>
                         </div>
                         <div className="flex gap-1.5 sm:gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => generateReceipt(reservation)}
+                            className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-600 transition-all duration-300"
+                            title="Generate Receipt"
+                          >
+                            <Receipt className="w-4 h-4 sm:w-5 sm:h-5" />
+                          </button>
                           <button
                             onClick={() => handleEditReservation(reservation)}
                             className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 transition-all duration-300"
