@@ -38,6 +38,7 @@ export async function getReservations() {
       pricePerNight: row.price_per_night,
       nights: row.nights,
       totalPrice: row.total_price,
+      depositPaid: row.deposit_paid === 1,
     }));
   } catch (error) {
     console.error('Error fetching reservations:', error);
@@ -49,8 +50,8 @@ export async function addReservation(reservation) {
   if (!client) throw new Error('Database client not initialized');
   try {
     const result = await client.execute({
-      sql: `INSERT INTO reservations (guest_name, guest_phone, check_in, check_out, guests, price_per_night, nights, total_price)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO reservations (guest_name, guest_phone, check_in, check_out, guests, price_per_night, nights, total_price, deposit_paid)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         reservation.guestName,
         reservation.guestPhone || '',
@@ -60,6 +61,7 @@ export async function addReservation(reservation) {
         reservation.pricePerNight,
         reservation.nights,
         reservation.totalPrice,
+        reservation.depositPaid ? 1 : 0,
       ],
     });
     return { ...reservation, id: Number(result.lastInsertRowid) };
@@ -74,7 +76,7 @@ export async function updateReservation(id, reservation) {
   try {
     await client.execute({
       sql: `UPDATE reservations
-            SET guest_name = ?, guest_phone = ?, check_in = ?, check_out = ?, guests = ?, price_per_night = ?, nights = ?, total_price = ?
+            SET guest_name = ?, guest_phone = ?, check_in = ?, check_out = ?, guests = ?, price_per_night = ?, nights = ?, total_price = ?, deposit_paid = ?
             WHERE id = ?`,
       args: [
         reservation.guestName,
@@ -85,6 +87,7 @@ export async function updateReservation(id, reservation) {
         reservation.pricePerNight,
         reservation.nights,
         reservation.totalPrice,
+        reservation.depositPaid ? 1 : 0,
         id,
       ],
     });
@@ -173,6 +176,22 @@ export async function deleteExpense(id) {
   }
 }
 
+// ============ DEPOSIT STATUS ============
+
+export async function toggleDepositStatus(id, depositPaid) {
+  if (!client) throw new Error('Database client not initialized');
+  try {
+    await client.execute({
+      sql: 'UPDATE reservations SET deposit_paid = ? WHERE id = ?',
+      args: [depositPaid ? 1 : 0, id],
+    });
+    return true;
+  } catch (error) {
+    console.error('Error toggling deposit status:', error);
+    throw error;
+  }
+}
+
 // ============ USERS (AUTH) ============
 
 export async function getUser(email) {
@@ -182,23 +201,64 @@ export async function getUser(email) {
       sql: 'SELECT * FROM users WHERE email = ?',
       args: [email],
     });
-    return result.rows[0] || null;
+    if (result.rows[0]) {
+      return {
+        id: result.rows[0].id,
+        email: result.rows[0].email,
+        password: result.rows[0].password || '',
+      };
+    }
+    return null;
   } catch (error) {
     console.error('Error fetching user:', error);
     return null;
   }
 }
 
-export async function createUser(email) {
+export async function createUser(email, password = '') {
   if (!client) throw new Error('Database client not initialized');
   try {
     const result = await client.execute({
-      sql: 'INSERT OR IGNORE INTO users (email) VALUES (?)',
-      args: [email],
+      sql: 'INSERT OR IGNORE INTO users (email, password) VALUES (?, ?)',
+      args: [email, password],
     });
     return { id: Number(result.lastInsertRowid), email };
   } catch (error) {
     console.error('Error creating user:', error);
     throw error;
+  }
+}
+
+export async function updateUserPassword(email, password) {
+  if (!client) throw new Error('Database client not initialized');
+  try {
+    await client.execute({
+      sql: 'UPDATE users SET password = ? WHERE email = ?',
+      args: [password, email],
+    });
+    return true;
+  } catch (error) {
+    console.error('Error updating password:', error);
+    throw error;
+  }
+}
+
+export async function verifyUser(email, password) {
+  if (!client) return null;
+  try {
+    const result = await client.execute({
+      sql: 'SELECT * FROM users WHERE email = ? AND password = ?',
+      args: [email, password],
+    });
+    if (result.rows[0]) {
+      return {
+        id: result.rows[0].id,
+        email: result.rows[0].email,
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('Error verifying user:', error);
+    return null;
   }
 }

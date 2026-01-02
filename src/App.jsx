@@ -5,7 +5,7 @@ import {
 import {
   Calendar, Users, DollarSign, TrendingUp, LogOut, Plus, Edit2, Trash2, X, Check,
   Wrench, Zap, Sparkles, Waves, Package, MoreHorizontal, Mail, ArrowRight, Home, Loader2,
-  Download, FileSpreadsheet, Image, Phone, Receipt
+  Download, FileSpreadsheet, Image, Phone, Receipt, Lock, Share2, CheckCircle, Clock, Settings
 } from 'lucide-react'
 import * as db from './db'
 
@@ -33,7 +33,13 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
   const [authError, setAuthError] = useState('')
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false)
 
   // App state
   const [activeTab, setActiveTab] = useState('reservations')
@@ -55,7 +61,8 @@ function App() {
     checkIn: '',
     checkOut: '',
     guests: 1,
-    pricePerNight: ''
+    pricePerNight: '',
+    depositPaid: false
   })
 
   // Expense form
@@ -106,12 +113,21 @@ function App() {
     return Math.ceil((end - start) / (1000 * 60 * 60 * 24))
   }
 
+  // Get default price based on check-in day
+  // Friday or Saturday check-in = $120 (weekend)
+  // Sunday through Thursday check-in = $90 (weekday)
+  const getDefaultPrice = (dateString) => {
+    const date = new Date(dateString)
+    const day = date.getDay() // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+    return (day === 5 || day === 6) ? 120 : 90
+  }
+
   // Auth handlers
-  const handleSendMagicLink = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
     setAuthError('')
 
-    if (loginEmail) {
+    if (loginEmail && loginPassword) {
       // Check if email is allowed
       const emailLower = loginEmail.toLowerCase().trim()
       if (!ALLOWED_EMAILS.map(e => e.toLowerCase()).includes(emailLower)) {
@@ -119,16 +135,69 @@ function App() {
         return
       }
 
-      // Log in directly (in production, this would send a real magic link email)
       try {
-        await db.createUser(loginEmail)
+        // Check if user exists
+        const user = await db.getUser(loginEmail)
+
+        if (!user) {
+          // Create user and prompt for password setup
+          await db.createUser(loginEmail, loginPassword)
+          localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: loginEmail }))
+          setIsAuthenticated(true)
+          setUserEmail(loginEmail)
+          setLoginEmail('')
+          setLoginPassword('')
+        } else if (!user.password) {
+          // User exists but no password, set it
+          await db.updateUserPassword(loginEmail, loginPassword)
+          localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: loginEmail }))
+          setIsAuthenticated(true)
+          setUserEmail(loginEmail)
+          setLoginEmail('')
+          setLoginPassword('')
+        } else {
+          // Verify password
+          const verified = await db.verifyUser(loginEmail, loginPassword)
+          if (verified) {
+            localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: loginEmail }))
+            setIsAuthenticated(true)
+            setUserEmail(loginEmail)
+            setLoginEmail('')
+            setLoginPassword('')
+          } else {
+            setAuthError('Invalid password. Please try again.')
+          }
+        }
       } catch (error) {
-        console.error('Error creating user:', error)
+        console.error('Login error:', error)
+        setAuthError('Login failed. Please try again.')
       }
-      localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: loginEmail }))
-      setIsAuthenticated(true)
-      setUserEmail(loginEmail)
-      setLoginEmail('')
+    }
+  }
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault()
+    setPasswordError('')
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match.')
+      return
+    }
+
+    if (newPassword.length < 4) {
+      setPasswordError('Password must be at least 4 characters.')
+      return
+    }
+
+    try {
+      await db.updateUserPassword(userEmail, newPassword)
+      setShowPasswordModal(false)
+      setNewPassword('')
+      setConfirmPassword('')
+      alert('Password updated successfully!')
+    } catch (error) {
+      console.error('Password update error:', error)
+      setPasswordError('Failed to update password.')
     }
   }
 
@@ -136,6 +205,20 @@ function App() {
     localStorage.removeItem(STORAGE_KEYS.AUTH)
     setIsAuthenticated(false)
     setUserEmail('')
+    setLoginPassword('')
+  }
+
+  // Toggle deposit status
+  const handleToggleDeposit = async (id, currentStatus) => {
+    try {
+      await db.toggleDepositStatus(id, !currentStatus)
+      setReservations(reservations.map(r =>
+        r.id === id ? { ...r, depositPaid: !currentStatus } : r
+      ))
+    } catch (error) {
+      console.error('Error toggling deposit:', error)
+      alert('Failed to update deposit status.')
+    }
   }
 
   // Reservation handlers
@@ -146,7 +229,8 @@ function App() {
       checkIn: '',
       checkOut: '',
       guests: 1,
-      pricePerNight: ''
+      pricePerNight: '',
+      depositPaid: false
     })
     setEditingReservation(null)
     setShowReservationForm(false)
@@ -167,7 +251,8 @@ function App() {
         guests: Number(reservationForm.guests),
         pricePerNight: Number(reservationForm.pricePerNight),
         nights,
-        totalPrice
+        totalPrice,
+        depositPaid: reservationForm.depositPaid
       }
 
       if (editingReservation) {
@@ -197,7 +282,8 @@ function App() {
       checkIn: reservation.checkIn,
       checkOut: reservation.checkOut,
       guests: reservation.guests,
-      pricePerNight: reservation.pricePerNight
+      pricePerNight: reservation.pricePerNight,
+      depositPaid: reservation.depositPaid || false
     })
     setEditingReservation(reservation)
     setShowReservationForm(true)
@@ -556,6 +642,20 @@ function App() {
           <div class="grand-total">$${reservation.totalPrice.toLocaleString()}</div>
         </div>
 
+        <div style="margin-top: 15px; padding: 12px; border-radius: 10px; background: ${reservation.depositPaid ? '#ecfdf5' : '#fef3c7'}; border: 1px solid ${reservation.depositPaid ? '#a7f3d0' : '#fcd34d'};">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <span style="font-size: 12px; color: #666;">Deposit (50%)</span>
+              <div style="font-size: 16px; font-weight: 600; color: ${reservation.depositPaid ? '#059669' : '#d97706'};">
+                $${(reservation.totalPrice / 2).toLocaleString()}
+              </div>
+            </div>
+            <span style="padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; background: ${reservation.depositPaid ? '#059669' : '#f59e0b'}; color: white;">
+              ${reservation.depositPaid ? 'PAID' : 'PENDING'}
+            </span>
+          </div>
+        </div>
+
         <div class="footer">
           <p>Thank you for choosing Amir's Chalet!</p>
           <p>We hope you enjoy your stay</p>
@@ -567,6 +667,40 @@ function App() {
     `
     receiptWindow.document.write(receiptHTML)
     receiptWindow.document.close()
+  }
+
+  // Share receipt via WhatsApp
+  const shareReceipt = (reservation) => {
+    const depositAmount = reservation.totalPrice / 2
+    const depositStatus = reservation.depositPaid ? '✅ Deposit Paid' : '⏳ Deposit Pending'
+
+    const message = `🏠 *Amir's Chalet - Reservation Receipt*
+
+📋 *Receipt #${reservation.id}*
+📅 Date: ${new Date().toLocaleDateString()}
+
+👤 *Guest:* ${reservation.guestName}
+${reservation.guestPhone ? `📞 Phone: ${reservation.guestPhone}` : ''}
+
+🗓️ *Stay Details:*
+• Check-in: ${new Date(reservation.checkIn).toLocaleDateString()} at 8 PM
+• Check-out: ${new Date(reservation.checkOut).toLocaleDateString()} at 6 PM
+• Guests: ${reservation.guests}
+
+💰 *Pricing:*
+• Price/Night: $${reservation.pricePerNight}
+• Nights: ${reservation.nights}
+• *Total: $${reservation.totalPrice.toLocaleString()}*
+
+💳 *Payment:*
+• Deposit (50%): $${depositAmount.toLocaleString()}
+• ${depositStatus}
+
+Thank you for choosing Amir's Chalet! 🏊‍♂️
+_Luxury Pool Retreat - Lebanon 🇱🇧_`
+
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`
+    window.open(whatsappUrl, '_blank')
   }
 
   // Login screen
@@ -584,7 +718,7 @@ function App() {
               <p className="text-cyan-300/70 text-sm mt-1">Lebanon 🇱🇧</p>
             </div>
 
-            <form onSubmit={handleSendMagicLink} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <label className="block text-cyan-100 text-sm font-medium mb-2">
                   Email Address
@@ -600,6 +734,23 @@ function App() {
                     required
                   />
                 </div>
+              </div>
+              <div>
+                <label className="block text-cyan-100 text-sm font-medium mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-cyan-300" />
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full pl-11 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-cyan-200/50 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
+                    required
+                  />
+                </div>
+                <p className="text-cyan-200/60 text-xs mt-2">First time? Enter any password to set it.</p>
               </div>
               <button
                 type="submit"
@@ -650,6 +801,13 @@ function App() {
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
               <span className="text-cyan-100 text-xs sm:text-sm hidden md:block truncate max-w-32">{userEmail}</span>
+              <button
+                onClick={() => setShowPasswordModal(true)}
+                className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all duration-300"
+                title="Change Password"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all duration-300"
@@ -786,7 +944,15 @@ function App() {
                     <input
                       type="date"
                       value={reservationForm.checkIn}
-                      onChange={(e) => setReservationForm({ ...reservationForm, checkIn: e.target.value })}
+                      onChange={(e) => {
+                        const newDate = e.target.value
+                        const defaultPrice = newDate ? getDefaultPrice(newDate) : ''
+                        setReservationForm({
+                          ...reservationForm,
+                          checkIn: newDate,
+                          pricePerNight: defaultPrice
+                        })
+                      }}
                       className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
                       required
                     />
@@ -813,7 +979,16 @@ function App() {
                     />
                   </div>
                   <div>
-                    <label className="block text-gray-600 text-sm font-medium mb-2">Price per Night ($)</label>
+                    <label className="block text-gray-600 text-sm font-medium mb-2">
+                      Price per Night ($)
+                      {reservationForm.checkIn && (
+                        <span className={`ml-2 text-xs ${
+                          getDefaultPrice(reservationForm.checkIn) === 120 ? 'text-amber-500' : 'text-blue-500'
+                        }`}>
+                          {getDefaultPrice(reservationForm.checkIn) === 120 ? '(Weekend)' : '(Weekday)'}
+                        </span>
+                      )}
+                    </label>
                     <input
                       type="number"
                       min="0"
@@ -835,9 +1010,26 @@ function App() {
                         <p className="text-xs text-gray-400">
                           {calculateNights(reservationForm.checkIn, reservationForm.checkOut)} nights
                         </p>
+                        <p className="text-xs text-amber-600 mt-1">
+                          Deposit (50%): ${((calculateNights(reservationForm.checkIn, reservationForm.checkOut) * Number(reservationForm.pricePerNight)) / 2).toLocaleString()}
+                        </p>
                       </div>
                     </div>
                   )}
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-3 cursor-pointer bg-gray-50 rounded-xl p-4 w-full border border-gray-200 hover:bg-gray-100 transition-all">
+                      <input
+                        type="checkbox"
+                        checked={reservationForm.depositPaid}
+                        onChange={(e) => setReservationForm({ ...reservationForm, depositPaid: e.target.checked })}
+                        className="w-5 h-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-gray-700">Deposit Paid (50%)</span>
+                        <p className="text-xs text-gray-400">Required 1 week before check-in</p>
+                      </div>
+                    </label>
+                  </div>
                   <div className="sm:col-span-2 lg:col-span-3 flex flex-col sm:flex-row gap-2 sm:gap-3 mt-2">
                     <button
                       type="submit"
@@ -871,72 +1063,117 @@ function App() {
               </div>
             ) : (
               <div className="grid gap-3 sm:gap-4">
-                {reservations.map(reservation => (
-                  <div
-                    key={reservation.id}
-                    className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6 border border-gray-100 hover:shadow-xl transition-all duration-300"
-                  >
-                    <div className="flex flex-col gap-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center flex-shrink-0">
-                            <Users className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                          </div>
-                          <div className="min-w-0">
-                            <h4 className="text-base sm:text-lg font-semibold text-gray-800 truncate">{reservation.guestName}</h4>
-                            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                              <p className="text-xs sm:text-sm text-gray-400">{reservation.guests} guest{reservation.guests > 1 ? 's' : ''}</p>
-                              {reservation.guestPhone && (
-                                <a href={`tel:${reservation.guestPhone}`} className="flex items-center gap-1 text-xs sm:text-sm text-blue-500 hover:text-blue-600">
-                                  <Phone className="w-3 h-3" />
-                                  {reservation.guestPhone}
-                                </a>
-                              )}
+                {reservations.map(reservation => {
+                  const depositAmount = reservation.totalPrice / 2
+                  const checkInDate = new Date(reservation.checkIn)
+                  const oneWeekBefore = new Date(checkInDate)
+                  oneWeekBefore.setDate(checkInDate.getDate() - 7)
+                  const isDepositDueSoon = !reservation.depositPaid && new Date() >= oneWeekBefore
+
+                  return (
+                    <div
+                      key={reservation.id}
+                      className={`bg-white rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6 border hover:shadow-xl transition-all duration-300 ${
+                        isDepositDueSoon ? 'border-amber-300 bg-amber-50/30' : 'border-gray-100'
+                      }`}
+                    >
+                      <div className="flex flex-col gap-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center flex-shrink-0">
+                              <Users className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-base sm:text-lg font-semibold text-gray-800 truncate">{reservation.guestName}</h4>
+                              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                                <p className="text-xs sm:text-sm text-gray-400">{reservation.guests} guest{reservation.guests > 1 ? 's' : ''}</p>
+                                {reservation.guestPhone && (
+                                  <a href={`tel:${reservation.guestPhone}`} className="flex items-center gap-1 text-xs sm:text-sm text-blue-500 hover:text-blue-600">
+                                    <Phone className="w-3 h-3" />
+                                    {reservation.guestPhone}
+                                  </a>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <div className="flex gap-1.5 sm:gap-2 flex-shrink-0">
-                          <button
-                            onClick={() => generateReceipt(reservation)}
-                            className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-600 transition-all duration-300"
-                            title="Generate Receipt"
-                          >
-                            <Receipt className="w-4 h-4 sm:w-5 sm:h-5" />
-                          </button>
-                          <button
-                            onClick={() => handleEditReservation(reservation)}
-                            className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 transition-all duration-300"
-                          >
-                            <Edit2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteReservation(reservation.id)}
-                            className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all duration-300"
-                          >
-                            <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-4">
-                          <div className="flex items-center gap-2 text-gray-600">
-                            <Calendar className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                            <span className="text-xs sm:text-sm">
-                              {new Date(reservation.checkIn).toLocaleDateString()} (8 PM) - {new Date(reservation.checkOut).toLocaleDateString()} (6 PM)
-                            </span>
-                          </div>
-                          <div className="text-xs sm:text-sm text-gray-500">
-                            🌙 {reservation.nights} night{reservation.nights > 1 ? 's' : ''} @ ${reservation.pricePerNight}/night
+                          <div className="flex gap-1.5 sm:gap-2 flex-shrink-0">
+                            <button
+                              onClick={() => shareReceipt(reservation)}
+                              className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-green-50 hover:bg-green-100 text-green-600 transition-all duration-300"
+                              title="Share via WhatsApp"
+                            >
+                              <Share2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                            </button>
+                            <button
+                              onClick={() => generateReceipt(reservation)}
+                              className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-600 transition-all duration-300"
+                              title="Generate Receipt"
+                            >
+                              <Receipt className="w-4 h-4 sm:w-5 sm:h-5" />
+                            </button>
+                            <button
+                              onClick={() => handleEditReservation(reservation)}
+                              className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 transition-all duration-300"
+                            >
+                              <Edit2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteReservation(reservation.id)}
+                              className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all duration-300"
+                            >
+                              <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                            </button>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between sm:justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
-                          <span className="text-xs text-gray-400 sm:hidden">Total</span>
-                          <p className="text-xl sm:text-2xl font-bold text-emerald-600">${reservation.totalPrice.toLocaleString()}</p>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-4">
+                            <div className="flex items-center gap-2 text-gray-600">
+                              <Calendar className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                              <span className="text-xs sm:text-sm">
+                                {new Date(reservation.checkIn).toLocaleDateString()} (8 PM) - {new Date(reservation.checkOut).toLocaleDateString()} (6 PM)
+                              </span>
+                            </div>
+                            <div className="text-xs sm:text-sm text-gray-500">
+                              🌙 {reservation.nights} night{reservation.nights > 1 ? 's' : ''} @ ${reservation.pricePerNight}/night
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between sm:justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                            <span className="text-xs text-gray-400 sm:hidden">Total</span>
+                            <p className="text-xl sm:text-2xl font-bold text-emerald-600">${reservation.totalPrice.toLocaleString()}</p>
+                          </div>
+                        </div>
+                        {/* Deposit Status */}
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-3 border-t border-gray-100">
+                          <div className="flex items-center gap-2">
+                            {reservation.depositPaid ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                Deposit Paid (${depositAmount.toLocaleString()})
+                              </span>
+                            ) : (
+                              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
+                                isDepositDueSoon ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                <Clock className="w-3.5 h-3.5" />
+                                {isDepositDueSoon ? 'Deposit Due!' : 'Deposit Pending'} (${depositAmount.toLocaleString()})
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => handleToggleDeposit(reservation.id, reservation.depositPaid)}
+                            className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-all ${
+                              reservation.depositPaid
+                                ? 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+                                : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                            }`}
+                          >
+                            {reservation.depositPaid ? 'Mark Unpaid' : 'Mark as Paid'}
+                          </button>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
@@ -1218,6 +1455,80 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* Change Password Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <Lock className="w-5 h-5 text-blue-500" />
+                Change Password
+              </h3>
+              <button
+                onClick={() => {
+                  setShowPasswordModal(false)
+                  setNewPassword('')
+                  setConfirmPassword('')
+                  setPasswordError('')
+                }}
+                className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="block text-gray-600 text-sm font-medium mb-2">New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-gray-600 text-sm font-medium mb-2">Confirm Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
+                  required
+                />
+              </div>
+              {passwordError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+                  {passwordError}
+                </div>
+              )}
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="submit"
+                  className="flex-1 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+                >
+                  Update Password
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordModal(false)
+                    setNewPassword('')
+                    setConfirmPassword('')
+                    setPasswordError('')
+                  }}
+                  className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-all duration-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="bg-white/50 backdrop-blur-sm border-t border-gray-200 py-4 sm:py-6 mt-6 sm:mt-8">
