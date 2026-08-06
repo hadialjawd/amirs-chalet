@@ -9,19 +9,19 @@ function beirutDateString(offsetDays = 0) {
 }
 
 export default async function handler(req, res) {
-  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET?.trim()}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   const client = createClient({
-    url: process.env.VITE_TURSO_DATABASE_URL,
-    authToken: process.env.VITE_TURSO_AUTH_TOKEN,
+    url: process.env.VITE_TURSO_DATABASE_URL?.trim(),
+    authToken: process.env.VITE_TURSO_AUTH_TOKEN?.trim(),
   });
 
   webpush.setVapidDetails(
     `mailto:${CONTACT_EMAIL}`,
-    process.env.VITE_VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
+    process.env.VITE_VAPID_PUBLIC_KEY?.trim(),
+    process.env.VAPID_PRIVATE_KEY?.trim()
   );
 
   const today = beirutDateString(0);

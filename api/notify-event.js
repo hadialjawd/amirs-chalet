@@ -24,14 +24,14 @@ export default async function handler(req, res) {
   }
 
   const client = createClient({
-    url: process.env.VITE_TURSO_DATABASE_URL,
-    authToken: process.env.VITE_TURSO_AUTH_TOKEN,
+    url: process.env.VITE_TURSO_DATABASE_URL?.trim(),
+    authToken: process.env.VITE_TURSO_AUTH_TOKEN?.trim(),
   });
 
   webpush.setVapidDetails(
     `mailto:${HADI_EMAIL}`,
-    process.env.VITE_VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
+    process.env.VITE_VAPID_PUBLIC_KEY?.trim(),
+    process.env.VAPID_PRIVATE_KEY?.trim()
   );
 
   const payload = type === 'reservation'
