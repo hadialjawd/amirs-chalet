@@ -62,11 +62,12 @@ export default async function handler(req, res) {
       args: [today],
     });
     for (const r of checkInsToday.rows) {
+      const remainingBalance = r.total_price - (r.deposit_paid ? r.deposit_amount : 0);
       candidates.push({
         reservationId: r.id,
         type: 'checkin_full_payment_ask',
-        title: '❓ Has the Full Payment Been Paid?',
-        body: `${r.guest_name} is checking in right now. The full $${r.total_price.toLocaleString()} is still marked unpaid — tap to confirm.`,
+        title: '❓ Has the Remaining Balance Been Paid?',
+        body: `${r.guest_name} is checking in right now. Their remaining $${remainingBalance.toLocaleString()} balance is still marked unpaid — tap to confirm.`,
         checkType: 'fullPayment',
       });
     }

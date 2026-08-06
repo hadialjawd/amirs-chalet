@@ -393,7 +393,7 @@ function App() {
       if (!currentStatus) {
         const reservation = reservations.find(r => r.id === id)
         if (reservation) {
-          notifyEvent({ type: 'full_payment_paid', guestName: reservation.guestName, amount: reservation.totalPrice })
+          notifyEvent({ type: 'full_payment_paid', guestName: reservation.guestName, amount: getRemainingBalance(reservation) })
         }
       }
     } catch (error) {
@@ -424,7 +424,7 @@ function App() {
         notifyEvent({
           type: isFullPayment ? 'full_payment_paid' : 'deposit_paid',
           guestName: reservation.guestName,
-          amount: isFullPayment ? reservation.totalPrice : reservation.depositAmount
+          amount: isFullPayment ? getRemainingBalance(reservation) : reservation.depositAmount
         })
       }
     } catch (error) {
@@ -606,6 +606,11 @@ function App() {
     if (reservation.fullPaymentPaid) return reservation.totalPrice
     if (reservation.depositPaid) return reservation.depositAmount
     return 0
+  }
+
+  // What's still owed toward the full total — the deposit already paid doesn't count twice
+  const getRemainingBalance = (reservation) => {
+    return reservation.totalPrice - (reservation.depositPaid ? reservation.depositAmount : 0)
   }
 
   // Calculate totals
@@ -1646,7 +1651,7 @@ function App() {
                             ) : (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
                                 <Clock className="w-3.5 h-3.5" />
-                                Full Payment Pending (${reservation.totalPrice.toLocaleString()})
+                                Balance Pending (${getRemainingBalance(reservation).toLocaleString()})
                               </span>
                             )}
                           </div>
@@ -2066,10 +2071,10 @@ function App() {
               </h3>
             </div>
             <p className="text-gray-600 text-sm mb-1">
-              Has <span className="font-semibold">{paymentCheck.reservation.guestName}</span>'s {paymentCheck.checkType === 'fullPayment' ? 'full payment' : 'deposit'} been paid?
+              Has <span className="font-semibold">{paymentCheck.reservation.guestName}</span>'s {paymentCheck.checkType === 'fullPayment' ? 'remaining balance' : 'deposit'} been paid?
             </p>
             <p className="text-2xl font-bold text-amber-600 mb-6">
-              ${(paymentCheck.checkType === 'fullPayment' ? paymentCheck.reservation.totalPrice : paymentCheck.reservation.depositAmount).toLocaleString()}
+              ${(paymentCheck.checkType === 'fullPayment' ? getRemainingBalance(paymentCheck.reservation) : paymentCheck.reservation.depositAmount).toLocaleString()}
             </p>
             <div className="flex gap-3">
               <button

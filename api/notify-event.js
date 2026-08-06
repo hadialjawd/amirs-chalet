@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     reservation: { title: '🆕 New Reservation', body: `${guestName} was just added by ${actorEmail}.` },
     expense: { title: '🧾 New Expense', body: `${description} ($${amount}) was just added by ${actorEmail}.` },
     deposit_paid: { title: '💰 Deposit Received', body: `$${amount} deposit for ${guestName} was just marked paid by ${actorEmail}.` },
-    full_payment_paid: { title: '✅ Full Payment Received', body: `$${amount} full payment for ${guestName} was just marked paid by ${actorEmail}.` },
+    full_payment_paid: { title: '✅ Full Payment Received', body: `${guestName}'s remaining $${amount} balance was just marked paid by ${actorEmail}.` },
   };
   const payload = payloads[type];
 
