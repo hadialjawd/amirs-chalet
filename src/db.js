@@ -243,6 +243,52 @@ export async function updateUserPassword(email, password) {
   }
 }
 
+// ============ PUSH NOTIFICATIONS ============
+
+export async function savePushSubscription(email, subscription) {
+  if (!client) throw new Error('Database client not initialized');
+  try {
+    await client.execute({
+      sql: `INSERT INTO push_subscriptions (email, endpoint, p256dh, auth)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(endpoint) DO UPDATE SET email = excluded.email, p256dh = excluded.p256dh, auth = excluded.auth`,
+      args: [email, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth],
+    });
+    return true;
+  } catch (error) {
+    console.error('Error saving push subscription:', error);
+    throw error;
+  }
+}
+
+export async function getPushSubscription(email, endpoint) {
+  if (!client) return null;
+  try {
+    const result = await client.execute({
+      sql: 'SELECT * FROM push_subscriptions WHERE email = ? AND endpoint = ?',
+      args: [email, endpoint],
+    });
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error('Error fetching push subscription:', error);
+    return null;
+  }
+}
+
+export async function deletePushSubscription(endpoint) {
+  if (!client) return false;
+  try {
+    await client.execute({
+      sql: 'DELETE FROM push_subscriptions WHERE endpoint = ?',
+      args: [endpoint],
+    });
+    return true;
+  } catch (error) {
+    console.error('Error deleting push subscription:', error);
+    return false;
+  }
+}
+
 export async function verifyUser(email, password) {
   if (!client) return null;
   try {

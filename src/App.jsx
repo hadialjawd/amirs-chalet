@@ -5,7 +5,7 @@ import {
 import {
   Calendar, Users, DollarSign, TrendingUp, LogOut, Plus, Edit2, Trash2, X, Check,
   Wrench, Zap, Sparkles, Waves, Package, MoreHorizontal, Mail, ArrowRight, Home, Loader2,
-  Download, FileSpreadsheet, Image, Phone, Receipt, Lock, Share2, CheckCircle, Clock, Settings
+  Download, FileSpreadsheet, Image, Phone, Receipt, Lock, Share2, CheckCircle, Clock, AlertTriangle, Bell, BellOff
 } from 'lucide-react'
 import * as db from './db'
 
@@ -18,6 +18,13 @@ const ALLOWED_EMAILS = [
   'hadialjawad237@gmail.com',
   'amir.chalet@gmail.com'
 ]
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = window.atob(base64)
+  return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)))
+}
 
 const EXPENSE_CATEGORIES = [
   { id: 'maintenance', label: 'Maintenance', icon: Wrench },
@@ -46,6 +53,10 @@ function App() {
   const [expenses, setExpenses] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState(null)
+  const [confirmDialog, setConfirmDialog] = useState(null)
+  const [pushSubscribed, setPushSubscribed] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
 
   // Form state
   const [showReservationForm, setShowReservationForm] = useState(false)
@@ -89,6 +100,60 @@ function App() {
     }
   }, [isAuthenticated])
 
+  // Check current push subscription status
+  useEffect(() => {
+    if (!isAuthenticated) return
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => registration.pushManager.getSubscription())
+      .then(subscription => setPushSubscribed(!!subscription))
+      .catch(error => console.error('Error checking push subscription:', error))
+  }, [isAuthenticated, userEmail])
+
+  const handleTogglePush = async () => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      showToast('Push notifications are not supported on this browser.')
+      return
+    }
+
+    setPushBusy(true)
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.js')
+
+      if (pushSubscribed) {
+        const subscription = await registration.pushManager.getSubscription()
+        if (subscription) {
+          await db.deletePushSubscription(subscription.endpoint)
+          await subscription.unsubscribe()
+        }
+        setPushSubscribed(false)
+        showToast('Notifications turned off.', 'success')
+        return
+      }
+
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') {
+        showToast('Notification permission was denied.')
+        return
+      }
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY)
+      })
+
+      await db.savePushSubscription(userEmail, subscription.toJSON())
+      setPushSubscribed(true)
+      showToast('Notifications enabled! You\'ll get alerts for upcoming check-ins/outs and unpaid deposits.', 'success')
+    } catch (error) {
+      console.error('Error toggling push notifications:', error)
+      showToast('Failed to enable notifications. Please try again.')
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
   const loadData = async () => {
     setLoading(true)
     try {
@@ -104,6 +169,25 @@ function App() {
       setLoading(false)
     }
   }
+
+  const showToast = (message, type = 'error') => {
+    setToast({ message, type })
+  }
+
+  // Best-effort push notification to Hadi about something someone else just added
+  const notifyEvent = (payload) => {
+    fetch('/api/notify-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actorEmail: userEmail, ...payload })
+    }).catch(error => console.error('notify-event failed:', error))
+  }
+
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 3500)
+    return () => clearTimeout(timer)
+  }, [toast])
 
   // Calculate nights between dates
   const calculateNights = (checkIn, checkOut) => {
@@ -193,7 +277,7 @@ function App() {
       setShowPasswordModal(false)
       setNewPassword('')
       setConfirmPassword('')
-      alert('Password updated successfully!')
+      showToast('Password updated successfully!', 'success')
     } catch (error) {
       console.error('Password update error:', error)
       setPasswordError('Failed to update password.')
@@ -216,7 +300,7 @@ function App() {
       ))
     } catch (error) {
       console.error('Error toggling deposit:', error)
-      alert('Failed to update deposit status.')
+      showToast('Failed to update deposit status.')
     }
   }
 
@@ -237,8 +321,12 @@ function App() {
 
   const handleSaveReservation = async (e) => {
     e.preventDefault()
-    setSaving(true)
     const nights = calculateNights(reservationForm.checkIn, reservationForm.checkOut)
+    if (nights <= 0) {
+      showToast('Check-out date must be after the check-in date.')
+      return
+    }
+    setSaving(true)
     const totalPrice = nights * Number(reservationForm.pricePerNight)
 
     try {
@@ -264,11 +352,12 @@ function App() {
       } else {
         const newReservation = await db.addReservation(reservationData)
         setReservations([...reservations, newReservation])
+        notifyEvent({ type: 'reservation', guestName: reservationData.guestName })
       }
       resetReservationForm()
     } catch (error) {
       console.error('Error saving reservation:', error)
-      alert('Failed to save reservation. Please try again.')
+      showToast('Failed to save reservation. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -288,16 +377,21 @@ function App() {
     setShowReservationForm(true)
   }
 
-  const handleDeleteReservation = async (id) => {
-    if (confirm('Are you sure you want to delete this reservation?')) {
-      try {
-        await db.deleteReservation(id)
-        setReservations(reservations.filter(r => r.id !== id))
-      } catch (error) {
-        console.error('Error deleting reservation:', error)
-        alert('Failed to delete reservation. Please try again.')
+  const handleDeleteReservation = (id) => {
+    setConfirmDialog({
+      title: 'Delete Reservation',
+      message: 'Are you sure you want to delete this reservation? This cannot be undone.',
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        try {
+          await db.deleteReservation(id)
+          setReservations(reservations.filter(r => r.id !== id))
+        } catch (error) {
+          console.error('Error deleting reservation:', error)
+          showToast('Failed to delete reservation. Please try again.')
+        }
       }
-    }
+    })
   }
 
   // Expense handlers
@@ -334,11 +428,12 @@ function App() {
       } else {
         const newExpense = await db.addExpense(expenseData)
         setExpenses([...expenses, newExpense])
+        notifyEvent({ type: 'expense', description: expenseData.description, amount: expenseData.amount })
       }
       resetExpenseForm()
     } catch (error) {
       console.error('Error saving expense:', error)
-      alert('Failed to save expense. Please try again.')
+      showToast('Failed to save expense. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -355,16 +450,21 @@ function App() {
     setShowExpenseForm(true)
   }
 
-  const handleDeleteExpense = async (id) => {
-    if (confirm('Are you sure you want to delete this expense?')) {
-      try {
-        await db.deleteExpense(id)
-        setExpenses(expenses.filter(e => e.id !== id))
-      } catch (error) {
-        console.error('Error deleting expense:', error)
-        alert('Failed to delete expense. Please try again.')
+  const handleDeleteExpense = (id) => {
+    setConfirmDialog({
+      title: 'Delete Expense',
+      message: 'Are you sure you want to delete this expense? This cannot be undone.',
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        try {
+          await db.deleteExpense(id)
+          setExpenses(expenses.filter(e => e.id !== id))
+        } catch (error) {
+          console.error('Error deleting expense:', error)
+          showToast('Failed to delete expense. Please try again.')
+        }
       }
-    }
+    })
   }
 
   // Calculate totals
@@ -668,38 +768,211 @@ function App() {
     receiptWindow.document.close()
   }
 
-  // Share receipt via WhatsApp
-  const shareReceipt = (reservation) => {
+  // Draw a rounded rectangle path
+  const roundRect = (ctx, x, y, w, h, r) => {
+    ctx.beginPath()
+    ctx.moveTo(x + r, y)
+    ctx.arcTo(x + w, y, x + w, y + h, r)
+    ctx.arcTo(x + w, y + h, x, y + h, r)
+    ctx.arcTo(x, y + h, x, y, r)
+    ctx.arcTo(x, y, x + w, y, r)
+    ctx.closePath()
+  }
+
+  // Render a receipt as a shareable PNG image
+  const generateReceiptImage = (reservation) => {
+    const width = 640
+    const height = 900
+    const scale = 2
+    const canvas = document.createElement('canvas')
+    canvas.width = width * scale
+    canvas.height = height * scale
+    const ctx = canvas.getContext('2d')
+    ctx.scale(scale, scale)
+
+    const pad = 40
+    const contentW = width - pad * 2
+
+    // Page background
+    ctx.fillStyle = '#f0f9ff'
+    ctx.fillRect(0, 0, width, height)
+
+    // Header
+    const headerGrad = ctx.createLinearGradient(0, 0, width, 0)
+    headerGrad.addColorStop(0, '#0891b2')
+    headerGrad.addColorStop(1, '#0369a1')
+    ctx.fillStyle = headerGrad
+    ctx.fillRect(0, 0, width, 150)
+
+    ctx.fillStyle = '#ffffff'
+    ctx.textAlign = 'center'
+    ctx.font = 'bold 30px Arial, sans-serif'
+    ctx.fillText("🏠 Amir's Chalet", width / 2, 70)
+    ctx.font = '15px Arial, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'
+    ctx.fillText('Luxury Pool Retreat - Lebanon 🇱🇧', width / 2, 100)
+
+    let y = 190
+
+    // Card background
+    roundRect(ctx, pad, y, contentW, height - y - pad, 20)
+    ctx.fillStyle = '#ffffff'
+    ctx.fill()
+
+    y += 30
+    ctx.fillStyle = '#0369a1'
+    ctx.font = '13px Arial, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(`Receipt #${reservation.id}  |  ${new Date().toLocaleDateString()}`, width / 2, y)
+
+    y += 40
+    ctx.textAlign = 'left'
+    ctx.fillStyle = '#9ca3af'
+    ctx.font = '11px Arial, sans-serif'
+    ctx.fillText('GUEST', pad + 30, y)
+    y += 24
+    ctx.fillStyle = '#1f2937'
+    ctx.font = 'bold 20px Arial, sans-serif'
+    ctx.fillText(reservation.guestName, pad + 30, y)
+    if (reservation.guestPhone) {
+      y += 22
+      ctx.fillStyle = '#6b7280'
+      ctx.font = '14px Arial, sans-serif'
+      ctx.fillText(reservation.guestPhone, pad + 30, y)
+    }
+
+    y += 35
+    ctx.strokeStyle = '#e5e7eb'
+    ctx.beginPath()
+    ctx.moveTo(pad + 30, y)
+    ctx.lineTo(width - pad - 30, y)
+    ctx.stroke()
+
+    const row = (label, value) => {
+      y += 34
+      ctx.fillStyle = '#6b7280'
+      ctx.font = '14px Arial, sans-serif'
+      ctx.textAlign = 'left'
+      ctx.fillText(label, pad + 30, y)
+      ctx.fillStyle = '#1f2937'
+      ctx.font = 'bold 14px Arial, sans-serif'
+      ctx.textAlign = 'right'
+      ctx.fillText(value, width - pad - 30, y)
+    }
+
+    y += 15
+    row('Check-in', `${new Date(reservation.checkIn).toLocaleDateString()} (8 PM)`)
+    row('Check-out', `${new Date(reservation.checkOut).toLocaleDateString()} (6 PM)`)
+    row('Guests', `${reservation.guests} guest${reservation.guests > 1 ? 's' : ''}`)
+
+    y += 35
+    // Pricing box
+    const boxH = 150
+    const priceGrad = ctx.createLinearGradient(pad + 30, y, width - pad - 30, y)
+    priceGrad.addColorStop(0, '#0891b2')
+    priceGrad.addColorStop(1, '#0369a1')
+    roundRect(ctx, pad + 30, y, contentW - 60, boxH, 14)
+    ctx.fillStyle = priceGrad
+    ctx.fill()
+
+    let py = y + 34
+    ctx.font = '13px Arial, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.8)'
+    ctx.textAlign = 'left'
+    ctx.fillText('Price per Night', pad + 55, py)
+    ctx.fillStyle = '#ffffff'
+    ctx.font = 'bold 13px Arial, sans-serif'
+    ctx.textAlign = 'right'
+    ctx.fillText(`$${reservation.pricePerNight}`, width - pad - 55, py)
+
+    py += 30
+    ctx.fillStyle = 'rgba(255,255,255,0.8)'
+    ctx.font = '13px Arial, sans-serif'
+    ctx.textAlign = 'left'
+    ctx.fillText('Nights', pad + 55, py)
+    ctx.fillStyle = '#ffffff'
+    ctx.font = 'bold 13px Arial, sans-serif'
+    ctx.textAlign = 'right'
+    ctx.fillText(`${reservation.nights}`, width - pad - 55, py)
+
+    py += 50
+    ctx.fillStyle = '#ffffff'
+    ctx.font = 'bold 32px Arial, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(`$${reservation.totalPrice.toLocaleString()}`, width / 2, py)
+
+    y += boxH + 25
+
+    // Deposit status box
     const depositAmount = reservation.totalPrice / 2
-    const depositStatus = reservation.depositPaid ? '✅ Deposit Paid' : '⏳ Deposit Pending'
+    const paid = reservation.depositPaid
+    roundRect(ctx, pad + 30, y, contentW - 60, 70, 14)
+    ctx.fillStyle = paid ? '#ecfdf5' : '#fef3c7'
+    ctx.fill()
+    ctx.lineWidth = 1
+    ctx.strokeStyle = paid ? '#a7f3d0' : '#fcd34d'
+    ctx.stroke()
 
-    const message = `🏠 *Amir's Chalet - Reservation Receipt*
+    ctx.fillStyle = '#6b7280'
+    ctx.font = '12px Arial, sans-serif'
+    ctx.textAlign = 'left'
+    ctx.fillText('Deposit (50%)', pad + 55, y + 28)
+    ctx.fillStyle = paid ? '#059669' : '#d97706'
+    ctx.font = 'bold 18px Arial, sans-serif'
+    ctx.fillText(`$${depositAmount.toLocaleString()}`, pad + 55, y + 52)
 
-📋 *Receipt #${reservation.id}*
-📅 Date: ${new Date().toLocaleDateString()}
+    const badgeText = paid ? 'PAID' : 'PENDING'
+    ctx.font = 'bold 12px Arial, sans-serif'
+    const badgeW = ctx.measureText(badgeText).width + 28
+    roundRect(ctx, width - pad - 55 - badgeW, y + 22, badgeW, 26, 13)
+    ctx.fillStyle = paid ? '#059669' : '#f59e0b'
+    ctx.fill()
+    ctx.fillStyle = '#ffffff'
+    ctx.textAlign = 'center'
+    ctx.fillText(badgeText, width - pad - 55 - badgeW / 2, y + 39)
 
-👤 *Guest:* ${reservation.guestName}
-${reservation.guestPhone ? `📞 Phone: ${reservation.guestPhone}` : ''}
+    y += 100
+    ctx.fillStyle = '#9ca3af'
+    ctx.font = '13px Arial, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('Thank you for choosing Amir’s Chalet! 🏊', width / 2, y)
 
-🗓️ *Stay Details:*
-• Check-in: ${new Date(reservation.checkIn).toLocaleDateString()} at 8 PM
-• Check-out: ${new Date(reservation.checkOut).toLocaleDateString()} at 6 PM
-• Guests: ${reservation.guests}
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+  }
 
-💰 *Pricing:*
-• Price/Night: $${reservation.pricePerNight}
-• Nights: ${reservation.nights}
-• *Total: $${reservation.totalPrice.toLocaleString()}*
+  // Share receipt via WhatsApp (as an image where the platform allows it)
+  const shareReceipt = async (reservation) => {
+    const blob = await generateReceiptImage(reservation)
+    const fileName = `receipt-${reservation.id}.png`
+    const file = new File([blob], fileName, { type: 'image/png' })
 
-💳 *Payment:*
-• Deposit (50%): $${depositAmount.toLocaleString()}
-• ${depositStatus}
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: "Amir's Chalet Receipt",
+          text: `Receipt for ${reservation.guestName}`
+        })
+        return
+      } catch (error) {
+        if (error.name === 'AbortError') return
+        console.error('Share failed:', error)
+      }
+    }
 
-Thank you for choosing Amir's Chalet! 🏊‍♂️
-_Luxury Pool Retreat - Lebanon 🇱🇧_`
+    // Fallback (mainly desktop): download the image and open a prefilled WhatsApp chat
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    link.click()
+    URL.revokeObjectURL(url)
 
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`
-    window.open(whatsappUrl, '_blank')
+    showToast('Receipt image downloaded — attach it in the WhatsApp chat that just opened.', 'success')
+
+    const depositAmount = reservation.totalPrice / 2
+    const message = `🏠 *Amir's Chalet - Reservation Receipt*\n\nReceipt #${reservation.id} attached above 👆\n\n👤 *Guest:* ${reservation.guestName}\n💰 *Total:* $${reservation.totalPrice.toLocaleString()}\n💳 *Deposit (50%):* $${depositAmount.toLocaleString()} ${reservation.depositPaid ? '(Paid)' : '(Pending)'}`
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank')
   }
 
   // Login screen
@@ -801,15 +1074,35 @@ _Luxury Pool Retreat - Lebanon 🇱🇧_`
             <div className="flex items-center gap-2 sm:gap-4">
               <span className="text-cyan-100 text-xs sm:text-sm hidden md:block truncate max-w-32">{userEmail}</span>
               <button
+                onClick={handleTogglePush}
+                disabled={pushBusy}
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-white transition-all duration-300 disabled:opacity-50 ${
+                  pushSubscribed ? 'bg-white/25 hover:bg-white/30' : 'bg-white/10 hover:bg-white/20'
+                }`}
+                title={pushSubscribed ? 'Notifications On (tap to disable)' : 'Enable Notifications'}
+                aria-label={pushSubscribed ? 'Notifications On (tap to disable)' : 'Enable Notifications'}
+              >
+                {pushBusy ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : pushSubscribed ? (
+                  <Bell className="w-4 h-4" />
+                ) : (
+                  <BellOff className="w-4 h-4" />
+                )}
+              </button>
+              <button
                 onClick={() => setShowPasswordModal(true)}
                 className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all duration-300"
                 title="Change Password"
+                aria-label="Change Password"
               >
-                <Settings className="w-4 h-4" />
+                <Lock className="w-4 h-4" />
               </button>
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all duration-300"
+                title="Logout"
+                aria-label="Logout"
               >
                 <LogOut className="w-4 h-4" />
                 <span className="hidden sm:inline text-sm">Logout</span>
@@ -961,6 +1254,7 @@ _Luxury Pool Retreat - Lebanon 🇱🇧_`
                     <input
                       type="date"
                       value={reservationForm.checkOut}
+                      min={reservationForm.checkIn || undefined}
                       onChange={(e) => setReservationForm({ ...reservationForm, checkOut: e.target.value })}
                       className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
                       required
@@ -1100,6 +1394,7 @@ _Luxury Pool Retreat - Lebanon 🇱🇧_`
                               onClick={() => shareReceipt(reservation)}
                               className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-green-50 hover:bg-green-100 text-green-600 transition-all duration-300"
                               title="Share via WhatsApp"
+                              aria-label="Share via WhatsApp"
                             >
                               <Share2 className="w-4 h-4 sm:w-5 sm:h-5" />
                             </button>
@@ -1107,18 +1402,23 @@ _Luxury Pool Retreat - Lebanon 🇱🇧_`
                               onClick={() => generateReceipt(reservation)}
                               className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-600 transition-all duration-300"
                               title="Generate Receipt"
+                              aria-label="Generate Receipt"
                             >
                               <Receipt className="w-4 h-4 sm:w-5 sm:h-5" />
                             </button>
                             <button
                               onClick={() => handleEditReservation(reservation)}
                               className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 transition-all duration-300"
+                              title="Edit Reservation"
+                              aria-label="Edit Reservation"
                             >
                               <Edit2 className="w-4 h-4 sm:w-5 sm:h-5" />
                             </button>
                             <button
                               onClick={() => handleDeleteReservation(reservation.id)}
                               className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all duration-300"
+                              title="Delete Reservation"
+                              aria-label="Delete Reservation"
                             >
                               <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
                             </button>
@@ -1308,12 +1608,16 @@ _Luxury Pool Retreat - Lebanon 🇱🇧_`
                             <button
                               onClick={() => handleEditExpense(expense)}
                               className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 transition-all duration-300"
+                              title="Edit Expense"
+                              aria-label="Edit Expense"
                             >
                               <Edit2 className="w-4 h-4 sm:w-5 sm:h-5" />
                             </button>
                             <button
                               onClick={() => handleDeleteExpense(expense.id)}
                               className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all duration-300"
+                              title="Delete Expense"
+                              aria-label="Delete Expense"
                             >
                               <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
                             </button>
@@ -1525,6 +1829,56 @@ _Luxury Pool Retreat - Lebanon 🇱🇧_`
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Dialog */}
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-800">{confirmDialog.title}</h3>
+            </div>
+            <p className="text-gray-500 text-sm mb-6">{confirmDialog.message}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={confirmDialog.onConfirm}
+                className="flex-1 py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-semibold rounded-xl transition-all duration-300"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-all duration-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[calc(100%-2rem)] max-w-sm px-4">
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-medium ${
+            toast.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+              : 'bg-red-50 border-red-200 text-red-700'
+          }`}>
+            {toast.type === 'success' ? (
+              <CheckCircle className="w-5 h-5 flex-shrink-0" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+            )}
+            <span className="flex-1">{toast.message}</span>
+            <button onClick={() => setToast(null)} className="flex-shrink-0 opacity-60 hover:opacity-100">
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
