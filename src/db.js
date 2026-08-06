@@ -39,6 +39,7 @@ export async function getReservations() {
       nights: row.nights,
       totalPrice: row.total_price,
       depositPaid: row.deposit_paid === 1,
+      depositAmount: row.deposit_amount ?? row.total_price / 2,
     }));
   } catch (error) {
     console.error('Error fetching reservations:', error);
@@ -50,8 +51,8 @@ export async function addReservation(reservation) {
   if (!client) throw new Error('Database client not initialized');
   try {
     const result = await client.execute({
-      sql: `INSERT INTO reservations (guest_name, guest_phone, check_in, check_out, guests, price_per_night, nights, total_price, deposit_paid)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO reservations (guest_name, guest_phone, check_in, check_out, guests, price_per_night, nights, total_price, deposit_paid, deposit_amount)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         reservation.guestName,
         reservation.guestPhone || '',
@@ -62,6 +63,7 @@ export async function addReservation(reservation) {
         reservation.nights,
         reservation.totalPrice,
         reservation.depositPaid ? 1 : 0,
+        reservation.depositAmount,
       ],
     });
     return { ...reservation, id: Number(result.lastInsertRowid) };
@@ -76,7 +78,7 @@ export async function updateReservation(id, reservation) {
   try {
     await client.execute({
       sql: `UPDATE reservations
-            SET guest_name = ?, guest_phone = ?, check_in = ?, check_out = ?, guests = ?, price_per_night = ?, nights = ?, total_price = ?, deposit_paid = ?
+            SET guest_name = ?, guest_phone = ?, check_in = ?, check_out = ?, guests = ?, price_per_night = ?, nights = ?, total_price = ?, deposit_paid = ?, deposit_amount = ?
             WHERE id = ?`,
       args: [
         reservation.guestName,
@@ -88,6 +90,7 @@ export async function updateReservation(id, reservation) {
         reservation.nights,
         reservation.totalPrice,
         reservation.depositPaid ? 1 : 0,
+        reservation.depositAmount,
         id,
       ],
     });
@@ -239,6 +242,37 @@ export async function updateUserPassword(email, password) {
     return true;
   } catch (error) {
     console.error('Error updating password:', error);
+    throw error;
+  }
+}
+
+// ============ SETTINGS ============
+
+export async function getSetting(key, defaultValue = null) {
+  if (!client) return defaultValue;
+  try {
+    const result = await client.execute({
+      sql: 'SELECT value FROM settings WHERE key = ?',
+      args: [key],
+    });
+    return result.rows[0] ? result.rows[0].value : defaultValue;
+  } catch (error) {
+    console.error('Error fetching setting:', error);
+    return defaultValue;
+  }
+}
+
+export async function setSetting(key, value) {
+  if (!client) throw new Error('Database client not initialized');
+  try {
+    await client.execute({
+      sql: `INSERT INTO settings (key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      args: [key, String(value)],
+    });
+    return true;
+  } catch (error) {
+    console.error('Error saving setting:', error);
     throw error;
   }
 }

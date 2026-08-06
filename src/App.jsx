@@ -57,6 +57,9 @@ function App() {
   const [confirmDialog, setConfirmDialog] = useState(null)
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
+  const [depositPercent, setDepositPercent] = useState(50)
+  const [depositPercentInput, setDepositPercentInput] = useState('50')
+  const [savingDepositPercent, setSavingDepositPercent] = useState(false)
 
   // Form state
   const [showReservationForm, setShowReservationForm] = useState(false)
@@ -72,8 +75,10 @@ function App() {
     checkOut: '',
     guests: 1,
     pricePerNight: '',
-    depositPaid: false
+    depositPaid: false,
+    depositAmount: ''
   })
+  const [depositAuto, setDepositAuto] = useState(true)
 
   // Expense form
   const [expenseForm, setExpenseForm] = useState({
@@ -157,12 +162,14 @@ function App() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [reservationsData, expensesData] = await Promise.all([
+      const [reservationsData, expensesData, depositPercentSetting] = await Promise.all([
         db.getReservations(),
-        db.getExpenses()
+        db.getExpenses(),
+        db.getSetting('deposit_percent', '50')
       ])
       setReservations(reservationsData)
       setExpenses(expensesData)
+      setDepositPercent(Number(depositPercentSetting))
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
@@ -173,6 +180,10 @@ function App() {
   const showToast = (message, type = 'error') => {
     setToast({ message, type })
   }
+
+  useEffect(() => {
+    setDepositPercentInput(String(depositPercent))
+  }, [depositPercent])
 
   // Best-effort push notification to Hadi about something someone else just added
   const notifyEvent = (payload) => {
@@ -195,6 +206,16 @@ function App() {
     const end = new Date(checkOut)
     return Math.ceil((end - start) / (1000 * 60 * 60 * 24))
   }
+
+  // Auto-suggest the deposit amount at the default %, unless the user has typed a custom amount
+  useEffect(() => {
+    if (!depositAuto) return
+    const nights = calculateNights(reservationForm.checkIn, reservationForm.checkOut)
+    if (nights > 0 && reservationForm.pricePerNight) {
+      const total = nights * Number(reservationForm.pricePerNight)
+      setReservationForm(prev => ({ ...prev, depositAmount: Math.round(total * depositPercent / 100) }))
+    }
+  }, [reservationForm.checkIn, reservationForm.checkOut, reservationForm.pricePerNight, depositAuto, depositPercent])
 
   // Get default price based on check-in day
   // Friday or Saturday check-in = $120 (weekend)
@@ -284,6 +305,25 @@ function App() {
     }
   }
 
+  const handleSaveDepositPercent = async () => {
+    const value = Number(depositPercentInput)
+    if (!Number.isFinite(value) || value <= 0 || value > 100) {
+      showToast('Deposit percentage must be between 1 and 100.')
+      return
+    }
+    setSavingDepositPercent(true)
+    try {
+      await db.setSetting('deposit_percent', value)
+      setDepositPercent(value)
+      showToast(`Deposit percentage updated to ${value}%.`, 'success')
+    } catch (error) {
+      console.error('Error saving deposit percentage:', error)
+      showToast('Failed to update deposit percentage.')
+    } finally {
+      setSavingDepositPercent(false)
+    }
+  }
+
   const handleLogout = () => {
     localStorage.removeItem(STORAGE_KEYS.AUTH)
     setIsAuthenticated(false)
@@ -313,8 +353,10 @@ function App() {
       checkOut: '',
       guests: 1,
       pricePerNight: '',
-      depositPaid: false
+      depositPaid: false,
+      depositAmount: ''
     })
+    setDepositAuto(true)
     setEditingReservation(null)
     setShowReservationForm(false)
   }
@@ -339,7 +381,8 @@ function App() {
         pricePerNight: Number(reservationForm.pricePerNight),
         nights,
         totalPrice,
-        depositPaid: reservationForm.depositPaid
+        depositPaid: reservationForm.depositPaid,
+        depositAmount: Number(reservationForm.depositAmount) || 0
       }
 
       if (editingReservation) {
@@ -371,8 +414,10 @@ function App() {
       checkOut: reservation.checkOut,
       guests: reservation.guests,
       pricePerNight: reservation.pricePerNight,
-      depositPaid: reservation.depositPaid || false
+      depositPaid: reservation.depositPaid || false,
+      depositAmount: reservation.depositAmount
     })
+    setDepositAuto(false)
     setEditingReservation(reservation)
     setShowReservationForm(true)
   }
@@ -744,9 +789,9 @@ function App() {
         <div style="margin-top: 15px; padding: 12px; border-radius: 10px; background: ${reservation.depositPaid ? '#ecfdf5' : '#fef3c7'}; border: 1px solid ${reservation.depositPaid ? '#a7f3d0' : '#fcd34d'};">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
-              <span style="font-size: 12px; color: #666;">Deposit (50%)</span>
+              <span style="font-size: 12px; color: #666;">Deposit</span>
               <div style="font-size: 16px; font-weight: 600; color: ${reservation.depositPaid ? '#059669' : '#d97706'};">
-                $${(reservation.totalPrice / 2).toLocaleString()}
+                $${reservation.depositAmount.toLocaleString()}
               </div>
             </div>
             <span style="padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; background: ${reservation.depositPaid ? '#059669' : '#f59e0b'}; color: white;">
@@ -904,7 +949,7 @@ function App() {
     y += boxH + 25
 
     // Deposit status box
-    const depositAmount = reservation.totalPrice / 2
+    const depositAmount = reservation.depositAmount
     const paid = reservation.depositPaid
     roundRect(ctx, pad + 30, y, contentW - 60, 70, 14)
     ctx.fillStyle = paid ? '#ecfdf5' : '#fef3c7'
@@ -916,7 +961,7 @@ function App() {
     ctx.fillStyle = '#6b7280'
     ctx.font = '12px Arial, sans-serif'
     ctx.textAlign = 'left'
-    ctx.fillText('Deposit (50%)', pad + 55, y + 28)
+    ctx.fillText('Deposit', pad + 55, y + 28)
     ctx.fillStyle = paid ? '#059669' : '#d97706'
     ctx.font = 'bold 18px Arial, sans-serif'
     ctx.fillText(`$${depositAmount.toLocaleString()}`, pad + 55, y + 52)
@@ -970,8 +1015,7 @@ function App() {
 
     showToast('Receipt image downloaded — attach it in the WhatsApp chat that just opened.', 'success')
 
-    const depositAmount = reservation.totalPrice / 2
-    const message = `🏠 *Amir's Chalet - Reservation Receipt*\n\nReceipt #${reservation.id} attached above 👆\n\n👤 *Guest:* ${reservation.guestName}\n💰 *Total:* $${reservation.totalPrice.toLocaleString()}\n💳 *Deposit (50%):* $${depositAmount.toLocaleString()} ${reservation.depositPaid ? '(Paid)' : '(Pending)'}`
+    const message = `🏠 *Amir's Chalet - Reservation Receipt*\n\nReceipt #${reservation.id} attached above 👆\n\n👤 *Guest:* ${reservation.guestName}\n💰 *Total:* $${reservation.totalPrice.toLocaleString()}\n💳 *Deposit:* $${reservation.depositAmount.toLocaleString()} ${reservation.depositPaid ? '(Paid)' : '(Pending)'}`
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank')
   }
 
@@ -1113,7 +1157,7 @@ function App() {
       </header>
 
       {/* Summary Cards */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 -mt-4 sm:-mt-6 relative z-10">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 mt-4 sm:mt-6 relative z-10">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 border border-emerald-100">
             <div className="flex items-center justify-between">
@@ -1303,12 +1347,36 @@ function App() {
                         <p className="text-xs text-gray-400">
                           {calculateNights(reservationForm.checkIn, reservationForm.checkOut)} nights
                         </p>
-                        <p className="text-xs text-amber-600 mt-1">
-                          Deposit (50%): ${((calculateNights(reservationForm.checkIn, reservationForm.checkOut) * Number(reservationForm.pricePerNight)) / 2).toLocaleString()}
-                        </p>
                       </div>
                     </div>
                   )}
+                  <div>
+                    <label className="block text-gray-600 text-sm font-medium mb-2">
+                      Deposit Amount ($)
+                      {!depositAuto && (
+                        <button
+                          type="button"
+                          onClick={() => setDepositAuto(true)}
+                          className="ml-2 text-xs text-blue-500 hover:text-blue-600 font-normal"
+                        >
+                          Reset to default ({depositPercent}%)
+                        </button>
+                      )}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={reservationForm.depositAmount}
+                      onChange={(e) => {
+                        setDepositAuto(false)
+                        setReservationForm({ ...reservationForm, depositAmount: e.target.value })
+                      }}
+                      placeholder="0.00"
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Defaults to {depositPercent}% of the total, but you can enter any flat amount (e.g. $30).</p>
+                  </div>
                   <div className="flex items-end">
                     <label className="flex items-center gap-3 cursor-pointer bg-gray-50 rounded-xl p-4 w-full border border-gray-200 hover:bg-gray-100 transition-all">
                       <input
@@ -1318,7 +1386,9 @@ function App() {
                         className="w-5 h-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                       />
                       <div>
-                        <span className="text-sm font-medium text-gray-700">Deposit Paid (50%)</span>
+                        <span className="text-sm font-medium text-gray-700">
+                          Deposit Paid{reservationForm.depositAmount ? ` ($${Number(reservationForm.depositAmount).toLocaleString()})` : ''}
+                        </span>
                         <p className="text-xs text-gray-400">Required 1 week before check-in</p>
                       </div>
                     </label>
@@ -1357,7 +1427,7 @@ function App() {
             ) : (
               <div className="grid gap-3 sm:gap-4">
                 {reservations.map(reservation => {
-                  const depositAmount = reservation.totalPrice / 2
+                  const depositAmount = reservation.depositAmount
                   const checkInDate = new Date(reservation.checkIn)
                   const oneWeekBefore = new Date(checkInDate)
                   oneWeekBefore.setDate(checkInDate.getDate() - 7)
@@ -1759,14 +1829,14 @@ function App() {
         )}
       </div>
 
-      {/* Change Password Modal */}
+      {/* Settings Modal */}
       {showPasswordModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <Lock className="w-5 h-5 text-blue-500" />
-                Change Password
+                Settings
               </h3>
               <button
                 onClick={() => {
@@ -1780,6 +1850,34 @@ function App() {
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            <div className="mb-6 pb-6 border-b border-gray-100">
+              <h4 className="text-sm font-semibold text-gray-700 mb-1">Default Deposit Percentage</h4>
+              <p className="text-xs text-gray-400 mb-3">Used to auto-suggest the deposit on new reservations. You can still enter any flat amount per booking.</p>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={depositPercentInput}
+                    onChange={(e) => setDepositPercentInput(e.target.value)}
+                    className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveDepositPercent}
+                  disabled={savingDepositPercent}
+                  className="px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-all duration-300 disabled:opacity-50"
+                >
+                  {savingDepositPercent ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+                </button>
+              </div>
+            </div>
+
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Change Password</h4>
             <form onSubmit={handleChangePassword} className="space-y-4">
               <div>
                 <label className="block text-gray-600 text-sm font-medium mb-2">New Password</label>
