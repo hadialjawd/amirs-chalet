@@ -338,6 +338,12 @@ function App() {
       setReservations(reservations.map(r =>
         r.id === id ? { ...r, depositPaid: !currentStatus } : r
       ))
+      if (!currentStatus) {
+        const reservation = reservations.find(r => r.id === id)
+        if (reservation) {
+          notifyEvent({ type: 'deposit_paid', guestName: reservation.guestName, amount: reservation.depositAmount })
+        }
+      }
     } catch (error) {
       console.error('Error toggling deposit:', error)
       showToast('Failed to update deposit status.')
