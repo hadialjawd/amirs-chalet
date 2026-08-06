@@ -4,8 +4,8 @@ import { createClient } from '@libsql/client/web';
 let client = null;
 
 try {
-  const url = import.meta.env.VITE_TURSO_DATABASE_URL;
-  const authToken = import.meta.env.VITE_TURSO_AUTH_TOKEN;
+  const url = import.meta.env.VITE_TURSO_DATABASE_URL?.trim();
+  const authToken = import.meta.env.VITE_TURSO_AUTH_TOKEN?.trim();
 
   if (url && authToken) {
     client = createClient({

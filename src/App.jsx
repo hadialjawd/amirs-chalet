@@ -39,7 +39,6 @@ function App() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordError, setPasswordError] = useState('')
-  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false)
 
   // App state
   const [activeTab, setActiveTab] = useState('reservations')
@@ -136,32 +135,32 @@ function App() {
       }
 
       try {
-        // Check if user exists
-        const user = await db.getUser(loginEmail)
+        // Check if user exists (normalized email so case/whitespace can't create duplicate accounts)
+        const user = await db.getUser(emailLower)
 
         if (!user) {
           // Create user and prompt for password setup
-          await db.createUser(loginEmail, loginPassword)
-          localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: loginEmail }))
+          await db.createUser(emailLower, loginPassword)
+          localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: emailLower }))
           setIsAuthenticated(true)
-          setUserEmail(loginEmail)
+          setUserEmail(emailLower)
           setLoginEmail('')
           setLoginPassword('')
         } else if (!user.password) {
           // User exists but no password, set it
-          await db.updateUserPassword(loginEmail, loginPassword)
-          localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: loginEmail }))
+          await db.updateUserPassword(emailLower, loginPassword)
+          localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: emailLower }))
           setIsAuthenticated(true)
-          setUserEmail(loginEmail)
+          setUserEmail(emailLower)
           setLoginEmail('')
           setLoginPassword('')
         } else {
           // Verify password
-          const verified = await db.verifyUser(loginEmail, loginPassword)
+          const verified = await db.verifyUser(emailLower, loginPassword)
           if (verified) {
-            localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: loginEmail }))
+            localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: emailLower }))
             setIsAuthenticated(true)
-            setUserEmail(loginEmail)
+            setUserEmail(emailLower)
             setLoginEmail('')
             setLoginPassword('')
           } else {
