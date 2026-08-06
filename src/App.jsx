@@ -601,8 +601,15 @@ function App() {
     })
   }
 
+  // How much has actually been collected for a reservation so far (not the booked total)
+  const getReceivedAmount = (reservation) => {
+    if (reservation.fullPaymentPaid) return reservation.totalPrice
+    if (reservation.depositPaid) return reservation.depositAmount
+    return 0
+  }
+
   // Calculate totals
-  const totalIncome = reservations.reduce((sum, r) => sum + r.totalPrice, 0)
+  const totalIncome = reservations.reduce((sum, r) => sum + getReceivedAmount(r), 0)
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0)
   const netProfit = totalIncome - totalExpenses
 
@@ -615,7 +622,7 @@ function App() {
       if (!monthlyMap[month]) {
         monthlyMap[month] = { month, income: 0, expenses: 0 }
       }
-      monthlyMap[month].income += r.totalPrice
+      monthlyMap[month].income += getReceivedAmount(r)
     })
 
     expenses.forEach(e => {
@@ -1260,7 +1267,7 @@ function App() {
                 <TrendingUp className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
               </div>
             </div>
-            <p className="text-gray-400 text-xs mt-2 sm:mt-3">💰 From {reservations.length} reservations</p>
+            <p className="text-gray-400 text-xs mt-2 sm:mt-3">💰 Actually received so far, from {reservations.length} reservation{reservations.length !== 1 ? 's' : ''}</p>
           </div>
 
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 border border-rose-100">
