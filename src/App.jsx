@@ -60,8 +60,8 @@ function App() {
   const [depositPercent, setDepositPercent] = useState(50)
   const [depositPercentInput, setDepositPercentInput] = useState('50')
   const [savingDepositPercent, setSavingDepositPercent] = useState(false)
-  const [depositCheckReservation, setDepositCheckReservation] = useState(null)
-  const [pendingDepositCheckId, setPendingDepositCheckId] = useState(null)
+  const [paymentCheck, setPaymentCheck] = useState(null)
+  const [pendingPaymentCheck, setPendingPaymentCheck] = useState(null)
 
   // Form state
   const [showReservationForm, setShowReservationForm] = useState(false)
@@ -107,12 +107,12 @@ function App() {
     }
   }, [isAuthenticated])
 
-  // Pick up a ?depositCheck=<id> deep link from a notification tap (cold app launch)
+  // Pick up a ?depositCheck=<id>&checkType=deposit|fullPayment deep link from a notification tap (cold app launch)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const id = params.get('depositCheck')
     if (id) {
-      setPendingDepositCheckId(Number(id))
+      setPendingPaymentCheck({ id: Number(id), checkType: params.get('checkType') === 'fullPayment' ? 'fullPayment' : 'deposit' })
       window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])
@@ -122,7 +122,7 @@ function App() {
     if (!('serviceWorker' in navigator)) return
     const onMessage = (event) => {
       if (event.data?.type === 'DEPOSIT_CHECK' && event.data.reservationId) {
-        setPendingDepositCheckId(Number(event.data.reservationId))
+        setPendingPaymentCheck({ id: Number(event.data.reservationId), checkType: event.data.checkType === 'fullPayment' ? 'fullPayment' : 'deposit' })
       }
     }
     navigator.serviceWorker.addEventListener('message', onMessage)
@@ -131,13 +131,13 @@ function App() {
 
   // Once reservations are loaded, resolve a pending deep link into the actual popup
   useEffect(() => {
-    if (pendingDepositCheckId == null || reservations.length === 0) return
-    const reservation = reservations.find(r => r.id === pendingDepositCheckId)
+    if (!pendingPaymentCheck || reservations.length === 0) return
+    const reservation = reservations.find(r => r.id === pendingPaymentCheck.id)
     if (reservation) {
-      setDepositCheckReservation(reservation)
+      setPaymentCheck({ reservation, checkType: pendingPaymentCheck.checkType })
     }
-    setPendingDepositCheckId(null)
-  }, [pendingDepositCheckId, reservations])
+    setPendingPaymentCheck(null)
+  }, [pendingPaymentCheck, reservations])
 
   // Check current push subscription status
   useEffect(() => {
@@ -384,21 +384,52 @@ function App() {
     }
   }
 
-  // From the notification-triggered popup: explicitly set (not toggle) the deposit status
-  const handleDepositCheckResponse = async (paid) => {
-    const reservation = depositCheckReservation
-    setDepositCheckReservation(null)
-    if (!reservation || paid === reservation.depositPaid) return
-
+  const handleToggleFullPayment = async (id, currentStatus) => {
     try {
-      await db.toggleDepositStatus(reservation.id, paid)
-      setReservations(prev => prev.map(r => r.id === reservation.id ? { ...r, depositPaid: paid } : r))
-      if (paid) {
-        notifyEvent({ type: 'deposit_paid', guestName: reservation.guestName, amount: reservation.depositAmount })
+      await db.toggleFullPaymentStatus(id, !currentStatus)
+      setReservations(reservations.map(r =>
+        r.id === id ? { ...r, fullPaymentPaid: !currentStatus } : r
+      ))
+      if (!currentStatus) {
+        const reservation = reservations.find(r => r.id === id)
+        if (reservation) {
+          notifyEvent({ type: 'full_payment_paid', guestName: reservation.guestName, amount: reservation.totalPrice })
+        }
       }
     } catch (error) {
-      console.error('Error updating deposit status:', error)
-      showToast('Failed to update deposit status.')
+      console.error('Error toggling full payment:', error)
+      showToast('Failed to update full payment status.')
+    }
+  }
+
+  // From the notification-triggered popup: explicitly set (not toggle) the deposit/full-payment status
+  const handlePaymentCheckResponse = async (paid) => {
+    const check = paymentCheck
+    setPaymentCheck(null)
+    if (!check) return
+    const { reservation, checkType } = check
+    const isFullPayment = checkType === 'fullPayment'
+    const currentValue = isFullPayment ? reservation.fullPaymentPaid : reservation.depositPaid
+    if (paid === currentValue) return
+
+    try {
+      if (isFullPayment) {
+        await db.toggleFullPaymentStatus(reservation.id, paid)
+        setReservations(prev => prev.map(r => r.id === reservation.id ? { ...r, fullPaymentPaid: paid } : r))
+      } else {
+        await db.toggleDepositStatus(reservation.id, paid)
+        setReservations(prev => prev.map(r => r.id === reservation.id ? { ...r, depositPaid: paid } : r))
+      }
+      if (paid) {
+        notifyEvent({
+          type: isFullPayment ? 'full_payment_paid' : 'deposit_paid',
+          guestName: reservation.guestName,
+          amount: isFullPayment ? reservation.totalPrice : reservation.depositAmount
+        })
+      }
+    } catch (error) {
+      console.error('Error updating payment status:', error)
+      showToast('Failed to update payment status.')
     }
   }
 
@@ -1597,6 +1628,32 @@ function App() {
                             {reservation.depositPaid ? 'Mark Unpaid' : 'Mark as Paid'}
                           </button>
                         </div>
+                        {/* Full Payment Status */}
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-3 border-t border-gray-100">
+                          <div className="flex items-center gap-2">
+                            {reservation.fullPaymentPaid ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                Full Payment Received (${reservation.totalPrice.toLocaleString()})
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
+                                <Clock className="w-3.5 h-3.5" />
+                                Full Payment Pending (${reservation.totalPrice.toLocaleString()})
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => handleToggleFullPayment(reservation.id, reservation.fullPaymentPaid)}
+                            className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-all ${
+                              reservation.fullPaymentPaid
+                                ? 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+                                : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                            }`}
+                          >
+                            {reservation.fullPaymentPaid ? 'Mark Unpaid' : 'Mark as Paid'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )
@@ -1989,31 +2046,33 @@ function App() {
         </div>
       )}
 
-      {/* Deposit Check Popup (opened from a notification tap) */}
-      {depositCheckReservation && (
+      {/* Payment Check Popup (opened from a notification tap) */}
+      {paymentCheck && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
                 <Clock className="w-5 h-5 text-amber-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-800">Deposit Check</h3>
+              <h3 className="text-lg font-bold text-gray-800">
+                {paymentCheck.checkType === 'fullPayment' ? 'Full Payment Check' : 'Deposit Check'}
+              </h3>
             </div>
             <p className="text-gray-600 text-sm mb-1">
-              Has <span className="font-semibold">{depositCheckReservation.guestName}</span>'s deposit been paid?
+              Has <span className="font-semibold">{paymentCheck.reservation.guestName}</span>'s {paymentCheck.checkType === 'fullPayment' ? 'full payment' : 'deposit'} been paid?
             </p>
             <p className="text-2xl font-bold text-amber-600 mb-6">
-              ${depositCheckReservation.depositAmount.toLocaleString()}
+              ${(paymentCheck.checkType === 'fullPayment' ? paymentCheck.reservation.totalPrice : paymentCheck.reservation.depositAmount).toLocaleString()}
             </p>
             <div className="flex gap-3">
               <button
-                onClick={() => handleDepositCheckResponse(true)}
+                onClick={() => handlePaymentCheckResponse(true)}
                 className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl transition-all duration-300"
               >
                 Paid
               </button>
               <button
-                onClick={() => handleDepositCheckResponse(false)}
+                onClick={() => handlePaymentCheckResponse(false)}
                 className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-all duration-300"
               >
                 Not Yet

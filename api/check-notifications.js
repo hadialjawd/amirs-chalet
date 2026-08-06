@@ -52,22 +52,22 @@ export default async function handler(req, res) {
         type: 'deposit',
         title: '💰 Deposit Due',
         body: `${r.guest_name}'s $${r.deposit_amount.toLocaleString()} deposit is still unpaid (check-in ${r.check_in}).`,
-        depositCheck: true,
+        checkType: 'deposit',
       });
     }
   } else {
-    // Evening slot (8 PM Beirut, matching check-in time): ask about unpaid deposits for guests checking in tonight
+    // Evening slot (8 PM Beirut, matching check-in time): ask about the FULL balance for guests checking in tonight
     const checkInsToday = await client.execute({
-      sql: 'SELECT * FROM reservations WHERE check_in = ? AND deposit_paid = 0',
+      sql: 'SELECT * FROM reservations WHERE check_in = ? AND full_payment_paid = 0',
       args: [today],
     });
     for (const r of checkInsToday.rows) {
       candidates.push({
         reservationId: r.id,
-        type: 'checkin_deposit_ask',
-        title: '❓ Has the Deposit Been Paid?',
-        body: `${r.guest_name} is checking in right now. Their $${r.deposit_amount.toLocaleString()} deposit is still marked unpaid — tap to confirm.`,
-        depositCheck: true,
+        type: 'checkin_full_payment_ask',
+        title: '❓ Has the Full Payment Been Paid?',
+        body: `${r.guest_name} is checking in right now. The full $${r.total_price.toLocaleString()} is still marked unpaid — tap to confirm.`,
+        checkType: 'fullPayment',
       });
     }
   }
@@ -92,9 +92,10 @@ export default async function handler(req, res) {
       title: n.title,
       body: n.body,
       tag: `${n.type}-${n.reservationId}`,
-      url: n.depositCheck ? `/?depositCheck=${n.reservationId}` : '/',
-      reservationId: n.depositCheck ? n.reservationId : undefined,
-      depositCheck: n.depositCheck || false,
+      url: n.checkType ? `/?depositCheck=${n.reservationId}&checkType=${n.checkType}` : '/',
+      reservationId: n.checkType ? n.reservationId : undefined,
+      depositCheck: !!n.checkType,
+      checkType: n.checkType,
     });
   }
 

@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   if (!ALLOWED_EMAILS.includes(actorEmail)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
-  if (!['reservation', 'expense', 'deposit_paid'].includes(type)) {
+  if (!['reservation', 'expense', 'deposit_paid', 'full_payment_paid'].includes(type)) {
     return res.status(400).json({ error: 'Invalid type' });
   }
 
@@ -25,11 +25,13 @@ export default async function handler(req, res) {
   const client = getClient();
   setupWebPush();
 
-  const payload = type === 'reservation'
-    ? { title: '🆕 New Reservation', body: `${guestName} was just added by ${actorEmail}.` }
-    : type === 'expense'
-      ? { title: '🧾 New Expense', body: `${description} ($${amount}) was just added by ${actorEmail}.` }
-      : { title: '💰 Deposit Received', body: `$${amount} deposit for ${guestName} was just marked paid by ${actorEmail}.` };
+  const payloads = {
+    reservation: { title: '🆕 New Reservation', body: `${guestName} was just added by ${actorEmail}.` },
+    expense: { title: '🧾 New Expense', body: `${description} ($${amount}) was just added by ${actorEmail}.` },
+    deposit_paid: { title: '💰 Deposit Received', body: `$${amount} deposit for ${guestName} was just marked paid by ${actorEmail}.` },
+    full_payment_paid: { title: '✅ Full Payment Received', body: `$${amount} full payment for ${guestName} was just marked paid by ${actorEmail}.` },
+  };
+  const payload = payloads[type];
 
   const subs = await client.execute({
     sql: 'SELECT * FROM push_subscriptions WHERE email = ?',

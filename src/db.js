@@ -40,6 +40,7 @@ export async function getReservations() {
       totalPrice: row.total_price,
       depositPaid: row.deposit_paid === 1,
       depositAmount: row.deposit_amount ?? row.total_price / 2,
+      fullPaymentPaid: row.full_payment_paid === 1,
     }));
   } catch (error) {
     console.error('Error fetching reservations:', error);
@@ -191,6 +192,20 @@ export async function toggleDepositStatus(id, depositPaid) {
     return true;
   } catch (error) {
     console.error('Error toggling deposit status:', error);
+    throw error;
+  }
+}
+
+export async function toggleFullPaymentStatus(id, fullPaymentPaid) {
+  if (!client) throw new Error('Database client not initialized');
+  try {
+    await client.execute({
+      sql: 'UPDATE reservations SET full_payment_paid = ? WHERE id = ?',
+      args: [fullPaymentPaid ? 1 : 0, id],
+    });
+    return true;
+  } catch (error) {
+    console.error('Error toggling full payment status:', error);
     throw error;
   }
 }
