@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" role="img" aria-label="Amir's Chalet icon">
+  <defs><clipPath id="capS"><circle cx="120" cy="120" r="100"></circle></clipPath></defs>
+  <circle cx="120" cy="120" r="117" fill="#f6ece2" stroke="#201f1d" stroke-width="6"></circle>
+  <circle cx="120" cy="120" r="100" fill="#f0ad86"></circle>
+  <g clip-path="url(#capS)"><g transform="translate(120,120) scale(0.909) translate(-120,-120)">
+    <circle cx="68" cy="64" r="18" fill="#ffd27f"></circle>
+    <rect x="0" y="130" width="240" height="46" fill="#c9bda6"></rect>
+    <rect x="0" y="176" width="240" height="70" fill="#cfa189"></rect>
+    <polygon points="86,88 142,46 198,88" fill="#c69a53"></polygon>
+    <path d="M82 88 H202" stroke="#7d5411" stroke-width="7"></path>
+    <rect x="90" y="90" width="104" height="24" fill="#a8804d"></rect>
+    <rect x="84" y="114" width="116" height="22" fill="#b08a55"></rect>
+    <path d="M96 136 V176 M188 136 V176" stroke="#4a4744" stroke-width="8"></path>
+    <polygon points="70,186 170,186 230,224 10,224" fill="#efe7dd"></polygon>
+    <polygon points="80,193 160,193 212,217 28,217" fill="#4098c2"></polygon>
+  </g></g>
+  <circle cx="120" cy="120" r="100" fill="none" stroke="#201f1d" stroke-width="5"></circle>
+</svg>

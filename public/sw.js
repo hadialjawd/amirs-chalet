@@ -5,8 +5,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: '/vite.svg',
-      badge: '/vite.svg',
+      icon: '/favicon-192.png',
+      badge: '/favicon-192.png',
       tag: data.tag,
       data: { url: data.url || '/', reservationId: data.reservationId || null, depositCheck: !!data.depositCheck, checkType: data.checkType || 'deposit' }
     })

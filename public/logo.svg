@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" role="img" aria-label="Amir's Chalet badge: the reed gazebo, stone wall and pool at sundown">
+  <defs>
+    <clipPath id="capL"><circle cx="120" cy="120" r="100"></circle></clipPath>
+    <linearGradient id="skyL" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d98a72"></stop>
+      <stop offset="0.34" stop-color="#f0ad86"></stop>
+      <stop offset="0.66" stop-color="#f8c893"></stop>
+      <stop offset="1" stop-color="#e8875c"></stop>
+    </linearGradient>
+    <radialGradient id="glowL" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff0c4" stop-opacity="0.95"></stop>
+      <stop offset="1" stop-color="#fff0c4" stop-opacity="0"></stop>
+    </radialGradient>
+    <linearGradient id="thatchL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#dbb573"></stop>
+      <stop offset="1" stop-color="#b98f4f"></stop>
+    </linearGradient>
+    <linearGradient id="waterL" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f7ea6"></stop>
+      <stop offset="0.55" stop-color="#4098c2"></stop>
+      <stop offset="1" stop-color="#67bcda"></stop>
+    </linearGradient>
+  </defs>
+  <circle cx="120" cy="120" r="117" fill="#f6ece2" stroke="#201f1d" stroke-width="5"></circle>
+  <circle cx="120" cy="120" r="100" fill="url(#skyL)"></circle>
+  <g clip-path="url(#capL)"><g transform="translate(120,120) scale(0.909) translate(-120,-120)">
+    <circle cx="56" cy="52" r="36" fill="url(#glowL)"></circle>
+    <circle cx="56" cy="52" r="17" fill="#fff1cd"></circle>
+    <g fill="#5d7a4a">
+      <circle cx="186" cy="118" r="14"></circle>
+      <circle cx="204" cy="124" r="11"></circle>
+      <circle cx="218" cy="128" r="9"></circle>
+    </g>
+    <rect x="0" y="130" width="240" height="46" fill="#c9bda6"></rect>
+    <path d="M0 130 H240" stroke="#a1937c" stroke-width="2"></path>
+    <g stroke="#a89a83" stroke-width="1.3" fill="none" stroke-opacity="0.9">
+      <path d="M22 130 V146 M22 146 H62 M62 130 V146 M40 146 V162 M40 162 H84 M84 146 V162 M84 130 V146 M104 162 V176 M124 130 V148 M124 148 H160 M160 130 V148 M144 148 V164 M144 164 H188 M188 148 V164 M168 164 V176 M204 130 V150 M204 150 H240 M222 150 V176"></path>
+    </g>
+    <rect x="168" y="112" width="72" height="18" fill="#b98f57"></rect>
+    <g stroke="#6f5330" stroke-width="1.2" stroke-opacity="0.6" fill="none">
+      <path d="M174 113 V129 M180 113 V129 M186 113 V129 M192 113 V129 M198 113 V129 M204 113 V129 M210 113 V129 M216 113 V129 M222 113 V129 M228 113 V129 M234 113 V129"></path>
+    </g>
+    <path d="M168 112 H240" stroke="#8a6a3f" stroke-width="1.6"></path>
+    <rect x="0" y="176" width="240" height="70" fill="#cfa189"></rect>
+    <g stroke="#b3806a" stroke-width="1.2" fill="none" stroke-opacity="0.85">
+      <path d="M0 190 H240 M0 206 H240 M0 224 H240 M14 176 V246 M46 176 V246 M78 176 V246 M110 176 V246 M142 176 V246 M174 176 V246 M206 176 V246"></path>
+    </g>
+    <g fill="#3f5a37">
+      <path d="M28 178 L38 140 L48 178 Z"></path>
+      <path d="M32 156 L38 132 L44 156 Z"></path>
+      <path d="M198 178 L210 132 L222 178 Z"></path>
+      <path d="M202 150 L210 124 L218 150 Z"></path>
+    </g>
+    <g fill="#2f452a" fill-opacity="0.55">
+      <path d="M38 140 L48 178 L38 178 Z"></path>
+      <path d="M210 132 L222 178 L210 178 Z"></path>
+    </g>
+    <g transform="translate(130,132) scale(0.88) translate(-130,-132)">
+      <polygon points="88,88 142,50 196,88" fill="url(#thatchL)"></polygon>
+      <g stroke="#8f6c36" stroke-width="1.2" fill="none" stroke-opacity="0.55">
+        <path d="M142 53 L96 86 M142 53 L109 86 M142 53 L122 86 M142 53 V86 M142 53 L162 86 M142 53 L175 86 M142 53 L188 86"></path>
+      </g>
+      <path d="M84 88 H200" stroke="#7d5411" stroke-width="3"></path>
+      <rect x="92" y="90" width="100" height="22" fill="#a8804d" fill-opacity="0.18"></rect>
+      <path d="M92 91 H192 M92 111 H192" stroke="#8a6a3f" stroke-width="1.6" fill="none"></path>
+      <g stroke="#5d451f" stroke-width="1.3" fill="none" stroke-opacity="0.75">
+        <path d="M98 91 V111 M104 91 V111 M110 91 V111 M116 91 V111 M122 91 V111 M128 91 V111 M134 91 V111 M140 91 V111 M146 91 V111 M152 91 V111 M158 91 V111 M164 91 V111 M170 91 V111 M176 91 V111 M182 91 V111"></path>
+      </g>
+      <rect x="88" y="112" width="108" height="16" fill="#b08a55"></rect>
+      <g stroke="#7d5f34" stroke-width="1.4" fill="none" stroke-opacity="0.8">
+        <path d="M88 120 H196 M106 112 V128 M124 112 V128 M142 112 V128 M160 112 V128 M178 112 V128"></path>
+      </g>
+      <rect x="84" y="128" width="116" height="9" fill="#8d6b3f"></rect>
+      <path d="M84 140 H200" stroke="#4a4744" stroke-width="4"></path>
+      <path d="M96 137 V182 M190 137 V182" stroke="#4a4744" stroke-width="4.5"></path>
+      <path d="M143 140 V182" stroke="#4a4744" stroke-width="2.6" stroke-opacity="0.8"></path>
+      <rect x="84" y="137" width="116" height="45" fill="#8a7a63" fill-opacity="0.16"></rect>
+    </g>
+    <g>
+      <rect x="148" y="158" width="32" height="18" fill="#b9917a"></rect>
+      <g stroke="#8f6b56" stroke-width="1.2" fill="none" stroke-opacity="0.9">
+        <path d="M148 164 H180 M148 170 H180 M158 158 V164 M170 164 V170 M158 170 V176"></path>
+      </g>
+      <path d="M146 158 H182" stroke="#4a4744" stroke-width="2.4"></path>
+      <g stroke="#4a4744" stroke-width="1.2" fill="none" stroke-opacity="0.8">
+        <path d="M150 155 H178 M150 152 H178"></path>
+      </g>
+      <path d="M152 161 H176" stroke="#e2794f" stroke-width="2" stroke-opacity="0.75"></path>
+      <g stroke="#f6ece2" stroke-width="1.6" fill="none" stroke-opacity="0.45" stroke-linecap="round">
+        <path d="M162 150 q-5 -6 0 -11 q4 -5 0 -10 M172 148 q-4 -5 0 -9"></path>
+      </g>
+    </g>
+    <polygon points="70,186 170,186 230,224 10,224" fill="#efe7dd"></polygon>
+    <polygon points="78,192 162,192 214,218 26,218" fill="url(#waterL)"></polygon>
+    <g fill="#8fd3ea" fill-opacity="0.4">
+      <polygon points="86,198 126,198 118,206 74,206"></polygon>
+      <polygon points="140,208 190,208 178,214 128,214"></polygon>
+    </g>
+    <path d="M78 192 H162" stroke="#25668a" stroke-width="1.6" stroke-opacity="0.6"></path>
+  </g></g>
+  <circle cx="120" cy="120" r="100" fill="none" stroke="#201f1d" stroke-width="3.5"></circle>
+  <rect x="53" y="155" width="134" height="33" rx="4" fill="#7d5a33" stroke="#201f1d" stroke-width="3"></rect>
+  <text x="120" y="177" text-anchor="middle" font-family="Georgia, serif" font-weight="600" font-size="15.5" letter-spacing="0.6" fill="#fbf3e8">AMIR'S CHALET</text>
+</svg>

@@ -4,7 +4,7 @@ import {
 } from 'recharts'
 import {
   Calendar, Users, DollarSign, TrendingUp, LogOut, Plus, Edit2, Trash2, X, Check,
-  Wrench, Zap, Sparkles, Waves, Package, MoreHorizontal, Mail, ArrowRight, Home, Loader2,
+  Wrench, Zap, Sparkles, Waves, Package, MoreHorizontal, Mail, ArrowRight, Loader2,
   Download, FileSpreadsheet, Image, Phone, Receipt, Lock, Share2, CheckCircle, Clock, AlertTriangle, Bell, BellOff
 } from 'lucide-react'
 import * as db from './db'
@@ -845,6 +845,7 @@ function App() {
       </head>
       <body>
         <div class="header">
+          <img src="/logo.svg" alt="Amir's Chalet" style="width:64px;height:64px;margin-bottom:8px;" />
           <h1>Amir's Chalet</h1>
           <p>Luxury Pool Retreat - Lebanon</p>
         </div>
@@ -925,8 +926,15 @@ function App() {
     ctx.closePath()
   }
 
+  const loadImage = (src) => new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = reject
+    img.src = src
+  })
+
   // Render a receipt as a shareable PNG image
-  const generateReceiptImage = (reservation) => {
+  const generateReceiptImage = async (reservation) => {
     const width = 640
     const height = 900
     const scale = 2
@@ -950,13 +958,25 @@ function App() {
     ctx.fillStyle = headerGrad
     ctx.fillRect(0, 0, width, 150)
 
+    try {
+      const logo = await loadImage('/logo-icon.svg')
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(90, 75, 42, 0, Math.PI * 2)
+      ctx.clip()
+      ctx.drawImage(logo, 48, 33, 84, 84)
+      ctx.restore()
+    } catch {
+      // Logo failed to load (offline, etc.) — the text header below still works fine
+    }
+
     ctx.fillStyle = '#ffffff'
-    ctx.textAlign = 'center'
-    ctx.font = 'bold 30px Arial, sans-serif'
-    ctx.fillText("🏠 Amir's Chalet", width / 2, 70)
-    ctx.font = '15px Arial, sans-serif'
+    ctx.textAlign = 'left'
+    ctx.font = 'bold 26px Arial, sans-serif'
+    ctx.fillText("Amir's Chalet", 150, 70)
+    ctx.font = '14px Arial, sans-serif'
     ctx.fillStyle = 'rgba(255,255,255,0.9)'
-    ctx.fillText('Luxury Pool Retreat - Lebanon 🇱🇧', width / 2, 100)
+    ctx.fillText('Luxury Pool Retreat - Lebanon 🇱🇧', 150, 96)
 
     let y = 190
 
@@ -1127,9 +1147,7 @@ function App() {
         <div className="w-full max-w-md">
           <div className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white/20">
             <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 mb-4 shadow-lg">
-                <Home className="w-10 h-10 text-white" />
-              </div>
+              <img src="/logo.svg" alt="Amir's Chalet" className="w-24 h-24 mx-auto mb-4 drop-shadow-lg" />
               <h1 className="text-3xl font-bold text-white mb-2">Amir's Chalet</h1>
               <p className="text-cyan-200">Luxury Pool Retreat Management</p>
               <p className="text-cyan-300/70 text-sm mt-1">Lebanon 🇱🇧</p>
@@ -1208,9 +1226,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
-                <Home className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
-              </div>
+              <img src="/logo.svg" alt="Amir's Chalet" className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex-shrink-0 shadow-lg" />
               <div className="min-w-0">
                 <h1 className="text-lg sm:text-2xl font-bold text-white truncate">Amir's Chalet</h1>
                 <p className="text-cyan-100 text-xs sm:text-sm">🏊 Luxury Pool Retreat</p>
