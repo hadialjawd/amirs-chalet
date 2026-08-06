@@ -60,6 +60,8 @@ function App() {
   const [depositPercent, setDepositPercent] = useState(50)
   const [depositPercentInput, setDepositPercentInput] = useState('50')
   const [savingDepositPercent, setSavingDepositPercent] = useState(false)
+  const [depositCheckReservation, setDepositCheckReservation] = useState(null)
+  const [pendingDepositCheckId, setPendingDepositCheckId] = useState(null)
 
   // Form state
   const [showReservationForm, setShowReservationForm] = useState(false)
@@ -104,6 +106,38 @@ function App() {
       loadData()
     }
   }, [isAuthenticated])
+
+  // Pick up a ?depositCheck=<id> deep link from a notification tap (cold app launch)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get('depositCheck')
+    if (id) {
+      setPendingDepositCheckId(Number(id))
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
+
+  // Same, but for when the app is already open and the notification is tapped
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMessage = (event) => {
+      if (event.data?.type === 'DEPOSIT_CHECK' && event.data.reservationId) {
+        setPendingDepositCheckId(Number(event.data.reservationId))
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [])
+
+  // Once reservations are loaded, resolve a pending deep link into the actual popup
+  useEffect(() => {
+    if (pendingDepositCheckId == null || reservations.length === 0) return
+    const reservation = reservations.find(r => r.id === pendingDepositCheckId)
+    if (reservation) {
+      setDepositCheckReservation(reservation)
+    }
+    setPendingDepositCheckId(null)
+  }, [pendingDepositCheckId, reservations])
 
   // Check current push subscription status
   useEffect(() => {
@@ -346,6 +380,24 @@ function App() {
       }
     } catch (error) {
       console.error('Error toggling deposit:', error)
+      showToast('Failed to update deposit status.')
+    }
+  }
+
+  // From the notification-triggered popup: explicitly set (not toggle) the deposit status
+  const handleDepositCheckResponse = async (paid) => {
+    const reservation = depositCheckReservation
+    setDepositCheckReservation(null)
+    if (!reservation || paid === reservation.depositPaid) return
+
+    try {
+      await db.toggleDepositStatus(reservation.id, paid)
+      setReservations(prev => prev.map(r => r.id === reservation.id ? { ...r, depositPaid: paid } : r))
+      if (paid) {
+        notifyEvent({ type: 'deposit_paid', guestName: reservation.guestName, amount: reservation.depositAmount })
+      }
+    } catch (error) {
+      console.error('Error updating deposit status:', error)
       showToast('Failed to update deposit status.')
     }
   }
@@ -1933,6 +1985,40 @@ function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Deposit Check Popup (opened from a notification tap) */}
+      {depositCheckReservation && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <Clock className="w-5 h-5 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-800">Deposit Check</h3>
+            </div>
+            <p className="text-gray-600 text-sm mb-1">
+              Has <span className="font-semibold">{depositCheckReservation.guestName}</span>'s deposit been paid?
+            </p>
+            <p className="text-2xl font-bold text-amber-600 mb-6">
+              ${depositCheckReservation.depositAmount.toLocaleString()}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleDepositCheckResponse(true)}
+                className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl transition-all duration-300"
+              >
+                Paid
+              </button>
+              <button
+                onClick={() => handleDepositCheckResponse(false)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-all duration-300"
+              >
+                Not Yet
+              </button>
+            </div>
           </div>
         </div>
       )}

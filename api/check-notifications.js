@@ -52,6 +52,7 @@ export default async function handler(req, res) {
         type: 'deposit',
         title: '💰 Deposit Due',
         body: `${r.guest_name}'s $${r.deposit_amount.toLocaleString()} deposit is still unpaid (check-in ${r.check_in}).`,
+        depositCheck: true,
       });
     }
   } else {
@@ -65,7 +66,8 @@ export default async function handler(req, res) {
         reservationId: r.id,
         type: 'checkin_deposit_ask',
         title: '❓ Has the Deposit Been Paid?',
-        body: `${r.guest_name} is checking in right now. Their $${r.deposit_amount.toLocaleString()} deposit is still marked unpaid — update it in the app if that's changed.`,
+        body: `${r.guest_name} is checking in right now. Their $${r.deposit_amount.toLocaleString()} deposit is still marked unpaid — tap to confirm.`,
+        depositCheck: true,
       });
     }
   }
@@ -90,7 +92,9 @@ export default async function handler(req, res) {
       title: n.title,
       body: n.body,
       tag: `${n.type}-${n.reservationId}`,
-      url: '/',
+      url: n.depositCheck ? `/?depositCheck=${n.reservationId}` : '/',
+      reservationId: n.depositCheck ? n.reservationId : undefined,
+      depositCheck: n.depositCheck || false,
     });
   }
 

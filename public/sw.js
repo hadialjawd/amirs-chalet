@@ -8,19 +8,22 @@ self.addEventListener('push', (event) => {
       icon: '/vite.svg',
       badge: '/vite.svg',
       tag: data.tag,
-      data: { url: data.url || '/' }
+      data: { url: data.url || '/', reservationId: data.reservationId || null, depositCheck: !!data.depositCheck }
     })
   )
 })
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const url = event.notification.data?.url || '/'
+  const { url = '/', reservationId, depositCheck } = event.notification.data || {}
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
+          if (depositCheck && reservationId) {
+            client.postMessage({ type: 'DEPOSIT_CHECK', reservationId })
+          }
           return client.focus()
         }
       }
