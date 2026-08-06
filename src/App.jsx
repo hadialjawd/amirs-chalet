@@ -928,6 +928,7 @@ function App() {
 
   const loadImage = (src) => new Promise((resolve, reject) => {
     const img = new Image()
+    img.crossOrigin = 'anonymous'
     img.onload = () => resolve(img)
     img.onerror = reject
     img.src = src
@@ -959,7 +960,7 @@ function App() {
     ctx.fillRect(0, 0, width, 150)
 
     try {
-      const logo = await loadImage('/logo-icon.svg')
+      const logo = await loadImage('/favicon-192.png')
       ctx.save()
       ctx.beginPath()
       ctx.arc(90, 75, 42, 0, Math.PI * 2)
