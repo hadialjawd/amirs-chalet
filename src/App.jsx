@@ -971,6 +971,18 @@ function App() {
       ctx.restore()
     } catch (error) {
       console.error('Receipt logo failed to draw:', error)
+      // Visible in the image itself so a failure is diagnosable from a screenshot alone
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(90, 75, 42, 0, Math.PI * 2)
+      ctx.fillStyle = '#dc2626'
+      ctx.fill()
+      ctx.fillStyle = '#ffffff'
+      ctx.font = 'bold 13px Arial, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText('LOGO', 90, 71)
+      ctx.fillText('ERROR', 90, 84)
+      ctx.restore()
     }
 
     ctx.fillStyle = '#ffffff'
