@@ -445,6 +445,16 @@ function App() {
       showToast('Check-out date must be after the check-in date.')
       return
     }
+
+    const conflict = reservations.find(r => {
+      if (editingReservation && r.id === editingReservation.id) return false
+      return reservationForm.checkIn < r.checkOut && r.checkIn < reservationForm.checkOut
+    })
+    if (conflict) {
+      showToast(`${conflict.guestName} is already booked ${conflict.checkIn} to ${conflict.checkOut} — pick different dates.`)
+      return
+    }
+
     setSaving(true)
     const totalPrice = nights * Number(reservationForm.pricePerNight)
 
@@ -477,7 +487,7 @@ function App() {
       resetReservationForm()
     } catch (error) {
       console.error('Error saving reservation:', error)
-      showToast('Failed to save reservation. Please try again.')
+      showToast(error.message || 'Failed to save reservation. Please try again.')
     } finally {
       setSaving(false)
     }

@@ -18,6 +18,15 @@ function toReservation(row) {
   };
 }
 
+// Two date ranges [checkIn, checkOut) overlap if each starts before the other ends
+async function findOverlap(client, checkIn, checkOut, excludeId) {
+  const result = await client.execute({
+    sql: 'SELECT * FROM reservations WHERE check_in < ? AND ? < check_out AND id != ?',
+    args: [checkOut, checkIn, excludeId ?? -1],
+  });
+  return result.rows[0] ? toReservation(result.rows[0]) : null;
+}
+
 export default async function handler(req, res) {
   const email = requireAuth(req);
   if (!email) {
@@ -39,6 +48,10 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const reservation = req.body || {};
     try {
+      const overlap = await findOverlap(client, reservation.checkIn, reservation.checkOut);
+      if (overlap) {
+        return res.status(409).json({ error: `${overlap.guestName} is already booked ${overlap.checkIn} to ${overlap.checkOut}.` });
+      }
       const result = await client.execute({
         sql: `INSERT INTO reservations (guest_name, guest_phone, check_in, check_out, guests, price_per_night, nights, total_price, deposit_paid, deposit_amount, full_payment_paid)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -70,6 +83,10 @@ export default async function handler(req, res) {
   if (req.method === 'PUT') {
     const { id, ...reservation } = req.body || {};
     try {
+      const overlap = await findOverlap(client, reservation.checkIn, reservation.checkOut, id);
+      if (overlap) {
+        return res.status(409).json({ error: `${overlap.guestName} is already booked ${overlap.checkIn} to ${overlap.checkOut}.` });
+      }
       await client.execute({
         sql: `UPDATE reservations
               SET guest_name = ?, guest_phone = ?, check_in = ?, check_out = ?, guests = ?, price_per_night = ?, nights = ?, total_price = ?, deposit_paid = ?, deposit_amount = ?, full_payment_paid = ?

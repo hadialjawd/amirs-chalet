@@ -97,7 +97,10 @@ export async function addReservation(reservation) {
     method: 'POST',
     body: JSON.stringify(reservation),
   });
-  if (!res.ok) throw new Error('Failed to add reservation.');
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to add reservation.');
+  }
   const data = await res.json();
   return data.reservation;
 }
@@ -107,7 +110,10 @@ export async function updateReservation(id, reservation) {
     method: 'PUT',
     body: JSON.stringify({ id, ...reservation }),
   });
-  if (!res.ok) throw new Error('Failed to update reservation.');
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to update reservation.');
+  }
   const data = await res.json();
   return data.reservation;
 }
