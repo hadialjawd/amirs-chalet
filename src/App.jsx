@@ -1447,6 +1447,8 @@ function App() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
+              title={tab.label}
+              aria-label={tab.label}
               className={`flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-2.5 sm:py-3 rounded-xl font-medium transition-all duration-300 flex-1 sm:flex-none min-w-0 ${
                 activeTab === tab.id
                   ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
@@ -1454,7 +1456,7 @@ function App() {
               }`}
             >
               <tab.icon className="w-5 h-5 flex-shrink-0" />
-              <span className="text-sm sm:text-base truncate">{tab.label}</span>
+              <span className="hidden sm:inline text-sm sm:text-base truncate">{tab.label}</span>
             </button>
           ))}
         </div>
