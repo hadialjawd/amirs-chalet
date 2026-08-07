@@ -13,12 +13,6 @@ const STORAGE_KEYS = {
   AUTH: 'amirs-chalet-auth'
 }
 
-// Allowed emails - only these can access the app
-const ALLOWED_EMAILS = [
-  'hadialjawad237@gmail.com',
-  'amir.chalet@gmail.com'
-]
-
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
@@ -93,17 +87,29 @@ function App() {
     category: 'maintenance'
   })
 
-  // Load auth from localStorage and data from Turso on mount
+  // Restore session on mount — a stored token isn't proof it's still valid, but if it's
+  // stale/expired the first API call below will 401 and the listener further down logs out
   useEffect(() => {
     const auth = localStorage.getItem(STORAGE_KEYS.AUTH)
-    if (auth) {
+    if (auth && db.hasSession()) {
       const { email } = JSON.parse(auth)
       setIsAuthenticated(true)
       setUserEmail(email)
     }
   }, [])
 
-  // Load data from Turso when authenticated
+  // If any API call comes back 401 (expired/invalid session), drop back to the login screen
+  useEffect(() => {
+    const onUnauthorized = () => {
+      localStorage.removeItem(STORAGE_KEYS.AUTH)
+      setIsAuthenticated(false)
+      setUserEmail('')
+    }
+    window.addEventListener('amirs-chalet:unauthorized', onUnauthorized)
+    return () => window.removeEventListener('amirs-chalet:unauthorized', onUnauthorized)
+  }, [])
+
+  // Load data from the API when authenticated
   useEffect(() => {
     if (isAuthenticated) {
       loadData()
@@ -226,8 +232,8 @@ function App() {
   const notifyEvent = (payload) => {
     fetch('/api/notify-event', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actorEmail: userEmail, ...payload })
+      headers: { 'Content-Type': 'application/json', ...db.getAuthHeader() },
+      body: JSON.stringify(payload)
     }).catch(error => console.error('notify-event failed:', error))
   }
 
@@ -269,50 +275,19 @@ function App() {
     setAuthError('')
 
     if (loginEmail && loginPassword) {
-      // Check if email is allowed
       const emailLower = loginEmail.toLowerCase().trim()
-      if (!ALLOWED_EMAILS.map(e => e.toLowerCase()).includes(emailLower)) {
-        setAuthError('Access denied. This email is not authorized.')
+      const result = await db.login(emailLower, loginPassword)
+
+      if (!result.success) {
+        setAuthError(result.error)
         return
       }
 
-      try {
-        // Check if user exists (normalized email so case/whitespace can't create duplicate accounts)
-        const user = await db.getUser(emailLower)
-
-        if (!user) {
-          // Create user and prompt for password setup
-          await db.createUser(emailLower, loginPassword)
-          localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: emailLower }))
-          setIsAuthenticated(true)
-          setUserEmail(emailLower)
-          setLoginEmail('')
-          setLoginPassword('')
-        } else if (!user.password) {
-          // User exists but no password, set it
-          await db.updateUserPassword(emailLower, loginPassword)
-          localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: emailLower }))
-          setIsAuthenticated(true)
-          setUserEmail(emailLower)
-          setLoginEmail('')
-          setLoginPassword('')
-        } else {
-          // Verify password
-          const verified = await db.verifyUser(emailLower, loginPassword)
-          if (verified) {
-            localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: emailLower }))
-            setIsAuthenticated(true)
-            setUserEmail(emailLower)
-            setLoginEmail('')
-            setLoginPassword('')
-          } else {
-            setAuthError('Invalid password. Please try again.')
-          }
-        }
-      } catch (error) {
-        console.error('Login error:', error)
-        setAuthError('Login failed. Please try again.')
-      }
+      localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify({ email: result.email }))
+      setIsAuthenticated(true)
+      setUserEmail(result.email)
+      setLoginEmail('')
+      setLoginPassword('')
     }
   }
 
@@ -331,7 +306,7 @@ function App() {
     }
 
     try {
-      await db.updateUserPassword(userEmail, newPassword)
+      await db.changePassword(newPassword)
       setShowPasswordModal(false)
       setNewPassword('')
       setConfirmPassword('')
@@ -362,6 +337,7 @@ function App() {
   }
 
   const handleLogout = () => {
+    db.logout()
     localStorage.removeItem(STORAGE_KEYS.AUTH)
     setIsAuthenticated(false)
     setUserEmail('')

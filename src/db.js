@@ -1,47 +1,91 @@
-import { createClient } from '@libsql/client/web';
+// This file talks only to our own authenticated API (/api/*) — it never touches
+// the database directly. Database credentials live server-side only now; see
+// api/_lib/db.js. (Previously this file used @libsql/client/web with credentials
+// baked into the client bundle, which meant anyone could extract full DB access
+// from the deployed JS. Don't reintroduce that.)
 
-// Initialize Turso client with error handling
-let client = null;
+const TOKEN_KEY = 'amirs-chalet-token';
 
-try {
-  const url = import.meta.env.VITE_TURSO_DATABASE_URL?.trim();
-  const authToken = import.meta.env.VITE_TURSO_AUTH_TOKEN?.trim();
+function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
 
-  if (url && authToken) {
-    client = createClient({
-      url,
-      authToken,
-    });
-  } else {
-    console.error('Missing Turso environment variables:', { url: !!url, authToken: !!authToken });
+function setToken(token) {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+export function hasSession() {
+  return !!getToken();
+}
+
+// For the few call sites (e.g. sendBeacon-style fire-and-forget calls) that need
+// the Authorization header directly instead of going through apiFetch below.
+export function getAuthHeader() {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export function logout() {
+  setToken(null);
+}
+
+async function apiFetch(path, options = {}) {
+  const token = getToken();
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(path, { ...options, headers });
+
+  if (res.status === 401) {
+    setToken(null);
+    window.dispatchEvent(new CustomEvent('amirs-chalet:unauthorized'));
   }
-} catch (error) {
-  console.error('Failed to initialize Turso client:', error);
+
+  return res;
+}
+
+// ============ AUTH ============
+
+export async function login(email, password) {
+  try {
+    const res = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'login', email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Login failed. Please try again.' };
+    }
+    setToken(data.token);
+    return { success: true, email: data.email };
+  } catch (error) {
+    console.error('Login error:', error);
+    return { success: false, error: 'Login failed. Please try again.' };
+  }
+}
+
+export async function changePassword(newPassword) {
+  const res = await apiFetch('/api/auth', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'change-password', newPassword }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to update password.');
+  }
+  return true;
 }
 
 // ============ RESERVATIONS ============
 
 export async function getReservations() {
-  if (!client) {
-    console.error('Database client not initialized');
-    return [];
-  }
   try {
-    const result = await client.execute('SELECT * FROM reservations ORDER BY check_in DESC');
-    return result.rows.map(row => ({
-      id: row.id,
-      guestName: row.guest_name,
-      guestPhone: row.guest_phone || '',
-      checkIn: row.check_in,
-      checkOut: row.check_out,
-      guests: row.guests,
-      pricePerNight: row.price_per_night,
-      nights: row.nights,
-      totalPrice: row.total_price,
-      depositPaid: row.deposit_paid === 1,
-      depositAmount: row.deposit_amount ?? row.total_price / 2,
-      fullPaymentPaid: row.full_payment_paid === 1,
-    }));
+    const res = await apiFetch('/api/reservations');
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.reservations;
   } catch (error) {
     console.error('Error fetching reservations:', error);
     return [];
@@ -49,89 +93,60 @@ export async function getReservations() {
 }
 
 export async function addReservation(reservation) {
-  if (!client) throw new Error('Database client not initialized');
-  try {
-    const result = await client.execute({
-      sql: `INSERT INTO reservations (guest_name, guest_phone, check_in, check_out, guests, price_per_night, nights, total_price, deposit_paid, deposit_amount)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        reservation.guestName,
-        reservation.guestPhone || '',
-        reservation.checkIn,
-        reservation.checkOut,
-        reservation.guests,
-        reservation.pricePerNight,
-        reservation.nights,
-        reservation.totalPrice,
-        reservation.depositPaid ? 1 : 0,
-        reservation.depositAmount,
-      ],
-    });
-    return { ...reservation, id: Number(result.lastInsertRowid) };
-  } catch (error) {
-    console.error('Error adding reservation:', error);
-    throw error;
-  }
+  const res = await apiFetch('/api/reservations', {
+    method: 'POST',
+    body: JSON.stringify(reservation),
+  });
+  if (!res.ok) throw new Error('Failed to add reservation.');
+  const data = await res.json();
+  return data.reservation;
 }
 
 export async function updateReservation(id, reservation) {
-  if (!client) throw new Error('Database client not initialized');
-  try {
-    await client.execute({
-      sql: `UPDATE reservations
-            SET guest_name = ?, guest_phone = ?, check_in = ?, check_out = ?, guests = ?, price_per_night = ?, nights = ?, total_price = ?, deposit_paid = ?, deposit_amount = ?
-            WHERE id = ?`,
-      args: [
-        reservation.guestName,
-        reservation.guestPhone || '',
-        reservation.checkIn,
-        reservation.checkOut,
-        reservation.guests,
-        reservation.pricePerNight,
-        reservation.nights,
-        reservation.totalPrice,
-        reservation.depositPaid ? 1 : 0,
-        reservation.depositAmount,
-        id,
-      ],
-    });
-    return { ...reservation, id };
-  } catch (error) {
-    console.error('Error updating reservation:', error);
-    throw error;
-  }
+  const res = await apiFetch('/api/reservations', {
+    method: 'PUT',
+    body: JSON.stringify({ id, ...reservation }),
+  });
+  if (!res.ok) throw new Error('Failed to update reservation.');
+  const data = await res.json();
+  return data.reservation;
 }
 
 export async function deleteReservation(id) {
-  if (!client) throw new Error('Database client not initialized');
-  try {
-    await client.execute({
-      sql: 'DELETE FROM reservations WHERE id = ?',
-      args: [id],
-    });
-    return true;
-  } catch (error) {
-    console.error('Error deleting reservation:', error);
-    throw error;
-  }
+  const res = await apiFetch('/api/reservations', {
+    method: 'DELETE',
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) throw new Error('Failed to delete reservation.');
+  return true;
+}
+
+export async function toggleDepositStatus(id, depositPaid) {
+  const res = await apiFetch('/api/reservations', {
+    method: 'PATCH',
+    body: JSON.stringify({ id, field: 'depositPaid', value: depositPaid }),
+  });
+  if (!res.ok) throw new Error('Failed to toggle deposit status.');
+  return true;
+}
+
+export async function toggleFullPaymentStatus(id, fullPaymentPaid) {
+  const res = await apiFetch('/api/reservations', {
+    method: 'PATCH',
+    body: JSON.stringify({ id, field: 'fullPaymentPaid', value: fullPaymentPaid }),
+  });
+  if (!res.ok) throw new Error('Failed to toggle full payment status.');
+  return true;
 }
 
 // ============ EXPENSES ============
 
 export async function getExpenses() {
-  if (!client) {
-    console.error('Database client not initialized');
-    return [];
-  }
   try {
-    const result = await client.execute('SELECT * FROM expenses ORDER BY date DESC');
-    return result.rows.map(row => ({
-      id: row.id,
-      description: row.description,
-      amount: row.amount,
-      date: row.date,
-      category: row.category,
-    }));
+    const res = await apiFetch('/api/expenses');
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.expenses;
   } catch (error) {
     console.error('Error fetching expenses:', error);
     return [];
@@ -139,138 +154,42 @@ export async function getExpenses() {
 }
 
 export async function addExpense(expense) {
-  if (!client) throw new Error('Database client not initialized');
-  try {
-    const result = await client.execute({
-      sql: `INSERT INTO expenses (description, amount, date, category) VALUES (?, ?, ?, ?)`,
-      args: [expense.description, expense.amount, expense.date, expense.category],
-    });
-    return { ...expense, id: Number(result.lastInsertRowid) };
-  } catch (error) {
-    console.error('Error adding expense:', error);
-    throw error;
-  }
+  const res = await apiFetch('/api/expenses', {
+    method: 'POST',
+    body: JSON.stringify(expense),
+  });
+  if (!res.ok) throw new Error('Failed to add expense.');
+  const data = await res.json();
+  return data.expense;
 }
 
 export async function updateExpense(id, expense) {
-  if (!client) throw new Error('Database client not initialized');
-  try {
-    await client.execute({
-      sql: `UPDATE expenses SET description = ?, amount = ?, date = ?, category = ? WHERE id = ?`,
-      args: [expense.description, expense.amount, expense.date, expense.category, id],
-    });
-    return { ...expense, id };
-  } catch (error) {
-    console.error('Error updating expense:', error);
-    throw error;
-  }
+  const res = await apiFetch('/api/expenses', {
+    method: 'PUT',
+    body: JSON.stringify({ id, ...expense }),
+  });
+  if (!res.ok) throw new Error('Failed to update expense.');
+  const data = await res.json();
+  return data.expense;
 }
 
 export async function deleteExpense(id) {
-  if (!client) throw new Error('Database client not initialized');
-  try {
-    await client.execute({
-      sql: 'DELETE FROM expenses WHERE id = ?',
-      args: [id],
-    });
-    return true;
-  } catch (error) {
-    console.error('Error deleting expense:', error);
-    throw error;
-  }
-}
-
-// ============ DEPOSIT STATUS ============
-
-export async function toggleDepositStatus(id, depositPaid) {
-  if (!client) throw new Error('Database client not initialized');
-  try {
-    await client.execute({
-      sql: 'UPDATE reservations SET deposit_paid = ? WHERE id = ?',
-      args: [depositPaid ? 1 : 0, id],
-    });
-    return true;
-  } catch (error) {
-    console.error('Error toggling deposit status:', error);
-    throw error;
-  }
-}
-
-export async function toggleFullPaymentStatus(id, fullPaymentPaid) {
-  if (!client) throw new Error('Database client not initialized');
-  try {
-    await client.execute({
-      sql: 'UPDATE reservations SET full_payment_paid = ? WHERE id = ?',
-      args: [fullPaymentPaid ? 1 : 0, id],
-    });
-    return true;
-  } catch (error) {
-    console.error('Error toggling full payment status:', error);
-    throw error;
-  }
-}
-
-// ============ USERS (AUTH) ============
-
-export async function getUser(email) {
-  if (!client) return null;
-  try {
-    const result = await client.execute({
-      sql: 'SELECT * FROM users WHERE email = ?',
-      args: [email],
-    });
-    if (result.rows[0]) {
-      return {
-        id: result.rows[0].id,
-        email: result.rows[0].email,
-        password: result.rows[0].password || '',
-      };
-    }
-    return null;
-  } catch (error) {
-    console.error('Error fetching user:', error);
-    return null;
-  }
-}
-
-export async function createUser(email, password = '') {
-  if (!client) throw new Error('Database client not initialized');
-  try {
-    const result = await client.execute({
-      sql: 'INSERT OR IGNORE INTO users (email, password) VALUES (?, ?)',
-      args: [email, password],
-    });
-    return { id: Number(result.lastInsertRowid), email };
-  } catch (error) {
-    console.error('Error creating user:', error);
-    throw error;
-  }
-}
-
-export async function updateUserPassword(email, password) {
-  if (!client) throw new Error('Database client not initialized');
-  try {
-    await client.execute({
-      sql: 'UPDATE users SET password = ? WHERE email = ?',
-      args: [password, email],
-    });
-    return true;
-  } catch (error) {
-    console.error('Error updating password:', error);
-    throw error;
-  }
+  const res = await apiFetch('/api/expenses', {
+    method: 'DELETE',
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) throw new Error('Failed to delete expense.');
+  return true;
 }
 
 // ============ SETTINGS ============
 
 export async function getSetting(key, defaultValue = null) {
-  if (!client) return defaultValue;
   try {
-    const result = await client.execute({
-      sql: 'SELECT value FROM settings WHERE key = ?',
-      args: [key],
-    });
-    return result.rows[0] ? result.rows[0].value : defaultValue;
+    const res = await apiFetch('/api/settings');
+    if (!res.ok) return defaultValue;
+    const data = await res.json();
+    return String(data.depositPercent);
   } catch (error) {
     console.error('Error fetching setting:', error);
     return defaultValue;
@@ -278,82 +197,29 @@ export async function getSetting(key, defaultValue = null) {
 }
 
 export async function setSetting(key, value) {
-  if (!client) throw new Error('Database client not initialized');
-  try {
-    await client.execute({
-      sql: `INSERT INTO settings (key, value) VALUES (?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      args: [key, String(value)],
-    });
-    return true;
-  } catch (error) {
-    console.error('Error saving setting:', error);
-    throw error;
-  }
+  const res = await apiFetch('/api/settings', {
+    method: 'PUT',
+    body: JSON.stringify({ depositPercent: Number(value) }),
+  });
+  if (!res.ok) throw new Error('Failed to save setting.');
+  return true;
 }
 
 // ============ PUSH NOTIFICATIONS ============
 
 export async function savePushSubscription(email, subscription) {
-  if (!client) throw new Error('Database client not initialized');
-  try {
-    await client.execute({
-      sql: `INSERT INTO push_subscriptions (email, endpoint, p256dh, auth)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(endpoint) DO UPDATE SET email = excluded.email, p256dh = excluded.p256dh, auth = excluded.auth`,
-      args: [email, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth],
-    });
-    return true;
-  } catch (error) {
-    console.error('Error saving push subscription:', error);
-    throw error;
-  }
-}
-
-export async function getPushSubscription(email, endpoint) {
-  if (!client) return null;
-  try {
-    const result = await client.execute({
-      sql: 'SELECT * FROM push_subscriptions WHERE email = ? AND endpoint = ?',
-      args: [email, endpoint],
-    });
-    return result.rows[0] || null;
-  } catch (error) {
-    console.error('Error fetching push subscription:', error);
-    return null;
-  }
+  const res = await apiFetch('/api/push-subscribe', {
+    method: 'POST',
+    body: JSON.stringify({ subscription }),
+  });
+  if (!res.ok) throw new Error('Failed to save push subscription.');
+  return true;
 }
 
 export async function deletePushSubscription(endpoint) {
-  if (!client) return false;
-  try {
-    await client.execute({
-      sql: 'DELETE FROM push_subscriptions WHERE endpoint = ?',
-      args: [endpoint],
-    });
-    return true;
-  } catch (error) {
-    console.error('Error deleting push subscription:', error);
-    return false;
-  }
-}
-
-export async function verifyUser(email, password) {
-  if (!client) return null;
-  try {
-    const result = await client.execute({
-      sql: 'SELECT * FROM users WHERE email = ? AND password = ?',
-      args: [email, password],
-    });
-    if (result.rows[0]) {
-      return {
-        id: result.rows[0].id,
-        email: result.rows[0].email,
-      };
-    }
-    return null;
-  } catch (error) {
-    console.error('Error verifying user:', error);
-    return null;
-  }
+  const res = await apiFetch('/api/push-subscribe', {
+    method: 'DELETE',
+    body: JSON.stringify({ endpoint }),
+  });
+  return res.ok;
 }

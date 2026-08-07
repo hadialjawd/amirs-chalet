@@ -1,14 +1,7 @@
-import { createClient } from '@libsql/client';
 import webpush from 'web-push';
+export { getClient } from './db.js';
 
 const CONTACT_EMAIL = 'hadialjawad237@gmail.com';
-
-export function getClient() {
-  return createClient({
-    url: process.env.VITE_TURSO_DATABASE_URL?.trim(),
-    authToken: process.env.VITE_TURSO_AUTH_TOKEN?.trim(),
-  });
-}
 
 export function setupWebPush() {
   webpush.setVapidDetails(

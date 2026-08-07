@@ -1,18 +1,21 @@
 import { getClient, setupWebPush, sendToSubscriptions } from './_lib/push.js';
+import { requireAuth } from './_lib/auth.js';
 
 const HADI_EMAIL = 'hadialjawad237@gmail.com';
-const ALLOWED_EMAILS = ['hadialjawad237@gmail.com', 'amir.chalet@gmail.com'];
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { type, actorEmail, guestName, description, amount } = req.body || {};
-
-  if (!ALLOWED_EMAILS.includes(actorEmail)) {
-    return res.status(403).json({ error: 'Forbidden' });
+  // The actor is whoever is actually logged in — never trust a client-supplied email
+  const actorEmail = requireAuth(req);
+  if (!actorEmail) {
+    return res.status(401).json({ error: 'Not authenticated' });
   }
+
+  const { type, guestName, description, amount } = req.body || {};
+
   if (!['reservation', 'expense', 'deposit_paid', 'full_payment_paid'].includes(type)) {
     return res.status(400).json({ error: 'Invalid type' });
   }
