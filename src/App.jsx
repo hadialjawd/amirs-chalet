@@ -929,12 +929,98 @@ function App() {
     ctx.closePath()
   }
 
-  const loadImage = (src) => new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = reject
-    img.src = src
-  })
+  // Draws the badge logo with plain shapes — no image loading involved, so it can't fail to load
+  const drawLogoBadge = (ctx, cx, cy, r) => {
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.scale(r / 120, r / 120)
+    ctx.translate(-120, -120)
+
+    ctx.beginPath()
+    ctx.arc(120, 120, 117, 0, Math.PI * 2)
+    ctx.fillStyle = '#f6ece2'
+    ctx.fill()
+    ctx.lineWidth = 6
+    ctx.strokeStyle = '#201f1d'
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.arc(120, 120, 100, 0, Math.PI * 2)
+    ctx.fillStyle = '#f0ad86'
+    ctx.fill()
+
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(120, 120, 100, 0, Math.PI * 2)
+    ctx.clip()
+
+    ctx.beginPath()
+    ctx.arc(68, 64, 18, 0, Math.PI * 2)
+    ctx.fillStyle = '#ffd27f'
+    ctx.fill()
+
+    ctx.fillStyle = '#c9bda6'
+    ctx.fillRect(0, 130, 240, 46)
+    ctx.fillStyle = '#cfa189'
+    ctx.fillRect(0, 176, 240, 70)
+
+    ctx.beginPath()
+    ctx.moveTo(86, 88)
+    ctx.lineTo(142, 46)
+    ctx.lineTo(198, 88)
+    ctx.closePath()
+    ctx.fillStyle = '#c69a53'
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.moveTo(82, 88)
+    ctx.lineTo(202, 88)
+    ctx.strokeStyle = '#7d5411'
+    ctx.lineWidth = 7
+    ctx.stroke()
+
+    ctx.fillStyle = '#a8804d'
+    ctx.fillRect(90, 90, 104, 24)
+    ctx.fillStyle = '#b08a55'
+    ctx.fillRect(84, 114, 116, 22)
+
+    ctx.strokeStyle = '#4a4744'
+    ctx.lineWidth = 8
+    ctx.beginPath()
+    ctx.moveTo(96, 136)
+    ctx.lineTo(96, 176)
+    ctx.moveTo(188, 136)
+    ctx.lineTo(188, 176)
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.moveTo(70, 186)
+    ctx.lineTo(170, 186)
+    ctx.lineTo(230, 224)
+    ctx.lineTo(10, 224)
+    ctx.closePath()
+    ctx.fillStyle = '#efe7dd'
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.moveTo(80, 193)
+    ctx.lineTo(160, 193)
+    ctx.lineTo(212, 217)
+    ctx.lineTo(28, 217)
+    ctx.closePath()
+    ctx.fillStyle = '#4098c2'
+    ctx.fill()
+
+    ctx.restore()
+
+    ctx.beginPath()
+    ctx.arc(120, 120, 100, 0, Math.PI * 2)
+    ctx.strokeStyle = '#201f1d'
+    ctx.lineWidth = 5
+    ctx.stroke()
+
+    ctx.restore()
+  }
 
   // Render a receipt as a shareable PNG image
   const generateReceiptImage = async (reservation) => {
@@ -961,29 +1047,7 @@ function App() {
     ctx.fillStyle = headerGrad
     ctx.fillRect(0, 0, width, 150)
 
-    try {
-      const logo = await loadImage(LOGO_DATA_URI)
-      ctx.save()
-      ctx.beginPath()
-      ctx.arc(90, 75, 42, 0, Math.PI * 2)
-      ctx.clip()
-      ctx.drawImage(logo, 48, 33, 84, 84)
-      ctx.restore()
-    } catch (error) {
-      console.error('Receipt logo failed to draw:', error)
-      // Visible in the image itself so a failure is diagnosable from a screenshot alone
-      ctx.save()
-      ctx.beginPath()
-      ctx.arc(90, 75, 42, 0, Math.PI * 2)
-      ctx.fillStyle = '#dc2626'
-      ctx.fill()
-      ctx.fillStyle = '#ffffff'
-      ctx.font = 'bold 13px Arial, sans-serif'
-      ctx.textAlign = 'center'
-      ctx.fillText('LOGO', 90, 71)
-      ctx.fillText('ERROR', 90, 84)
-      ctx.restore()
-    }
+    drawLogoBadge(ctx, 90, 75, 42)
 
     ctx.fillStyle = '#ffffff'
     ctx.textAlign = 'left'
