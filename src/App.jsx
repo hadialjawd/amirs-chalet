@@ -631,8 +631,15 @@ function App() {
       return true
     })
     .sort((a, b) => {
-      const diff = new Date(a.checkIn) - new Date(b.checkIn)
-      return reservationSort === 'asc' ? diff : -diff
+      const aDate = new Date(a.checkIn)
+      const bDate = new Date(b.checkIn)
+      if (reservationSort === 'asc') {
+        const aPast = aDate < todayStart
+        const bPast = bDate < todayStart
+        if (aPast !== bPast) return aPast ? 1 : -1 // upcoming/current before past
+        return aPast ? bDate - aDate : aDate - bDate // upcoming: soonest first; past: most recent first
+      }
+      return bDate - aDate // latest first: furthest-future first
     })
 
   // Calendar tab helpers
