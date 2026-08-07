@@ -81,14 +81,15 @@ export async function changePassword(newPassword) {
 // ============ RESERVATIONS ============
 
 export async function getReservations() {
+  const empty = { reservations: [], calendarSync: { imported: [], skipped: [] } };
   try {
     const res = await apiFetch('/api/reservations');
-    if (!res.ok) return [];
+    if (!res.ok) return empty;
     const data = await res.json();
-    return data.reservations;
+    return { reservations: data.reservations, calendarSync: data.calendarSync || empty.calendarSync };
   } catch (error) {
     console.error('Error fetching reservations:', error);
-    return [];
+    return empty;
   }
 }
 

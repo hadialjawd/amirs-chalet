@@ -214,7 +214,7 @@ function App() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [reservationsData, expensesData, depositPercentSetting] = await Promise.all([
+      const [{ reservations: reservationsData, calendarSync }, expensesData, depositPercentSetting] = await Promise.all([
         db.getReservations(),
         db.getExpenses(),
         db.getSetting('deposit_percent', '50')
@@ -222,6 +222,13 @@ function App() {
       setReservations(reservationsData)
       setExpenses(expensesData)
       setDepositPercent(Number(depositPercentSetting))
+      if (calendarSync?.skipped?.length) {
+        const first = calendarSync.skipped[0]
+        const more = calendarSync.skipped.length > 1 ? ` (+${calendarSync.skipped.length - 1} more)` : ''
+        showToast(`⚠️ Skipped "${first.summary}" from Google Calendar — ${first.reason}${more}`, 'error')
+      } else if (calendarSync?.imported?.length) {
+        showToast(`Imported ${calendarSync.imported.length} booking(s) from Google Calendar: ${calendarSync.imported.join(', ')}`, 'success')
+      }
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
