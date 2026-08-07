@@ -3,9 +3,10 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import {
-  Calendar, Users, DollarSign, TrendingUp, LogOut, Plus, Edit2, Trash2, X, Check,
+  Calendar, CalendarDays, Users, DollarSign, TrendingUp, LogOut, Plus, Edit2, Trash2, X, Check,
   Wrench, Zap, Sparkles, Waves, Package, MoreHorizontal, Mail, ArrowRight, Loader2,
-  Download, FileSpreadsheet, Image, Phone, Receipt, Lock, Share2, CheckCircle, Clock, AlertTriangle, Bell, BellOff
+  Download, FileSpreadsheet, Image, Phone, Receipt, Lock, Share2, CheckCircle, Clock, AlertTriangle, Bell, BellOff,
+  ChevronLeft, ChevronRight, ArrowUpDown
 } from 'lucide-react'
 import * as db from './db'
 
@@ -51,6 +52,14 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null)
+  const [reservationFilter, setReservationFilter] = useState('all')
+  const [reservationSort, setReservationSort] = useState('asc')
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const d = new Date()
+    d.setDate(1)
+    d.setHours(0, 0, 0, 0)
+    return d
+  })
   const [confirmDialog, setConfirmDialog] = useState(null)
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
@@ -596,6 +605,44 @@ function App() {
   const totalIncome = reservations.reduce((sum, r) => sum + getReceivedAmount(r), 0)
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0)
   const netProfit = totalIncome - totalExpenses
+
+  // Reservations tab: filter + sort
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const weekFromNow = new Date(todayStart)
+  weekFromNow.setDate(todayStart.getDate() + 7)
+
+  const filteredReservations = reservations
+    .filter(r => {
+      if (reservationFilter === 'all') return true
+      const checkInDate = new Date(r.checkIn)
+      if (reservationFilter === 'upcoming') return checkInDate >= todayStart
+      if (reservationFilter === 'week') return checkInDate >= todayStart && checkInDate <= weekFromNow
+      return true
+    })
+    .sort((a, b) => {
+      const diff = new Date(a.checkIn) - new Date(b.checkIn)
+      return reservationSort === 'asc' ? diff : -diff
+    })
+
+  // Calendar tab helpers
+  const getReservationsForDay = (date) => {
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    return reservations.filter(r => r.checkIn <= dateStr && dateStr < r.checkOut)
+  }
+
+  const buildCalendarGrid = (monthDate) => {
+    const year = monthDate.getFullYear()
+    const month = monthDate.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const startOffset = firstDay.getDay() // 0=Sun
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+    const cells = []
+    for (let i = 0; i < startOffset; i++) cells.push(null)
+    for (let day = 1; day <= daysInMonth; day++) cells.push(new Date(year, month, day))
+    return cells
+  }
 
   // Prepare chart data
   const getMonthlyData = () => {
@@ -1383,6 +1430,7 @@ function App() {
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-1.5 sm:p-2 flex gap-1 sm:gap-2 w-full sm:w-auto sm:inline-flex overflow-x-auto">
           {[
             { id: 'reservations', label: 'Reservations', icon: Calendar },
+            { id: 'calendar', label: 'Calendar', icon: CalendarDays },
             { id: 'expenses', label: 'Expenses', icon: DollarSign },
             { id: 'analytics', label: 'Analytics', icon: TrendingUp }
           ].map(tab => (
@@ -1587,6 +1635,39 @@ function App() {
               </div>
             )}
 
+            {/* Filter + Sort */}
+            {reservations.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <div className="bg-white rounded-xl shadow-md p-1 flex gap-1 flex-1 sm:flex-none">
+                  {[
+                    { id: 'all', label: 'All' },
+                    { id: 'upcoming', label: 'Upcoming' },
+                    { id: 'week', label: 'This Week' }
+                  ].map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => setReservationFilter(f.id)}
+                      className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                        reservationFilter === f.id
+                          ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setReservationSort(reservationSort === 'asc' ? 'desc' : 'asc')}
+                  className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 bg-white rounded-xl shadow-md text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all duration-300"
+                  title={reservationSort === 'asc' ? 'Soonest first' : 'Latest first'}
+                >
+                  <ArrowUpDown className="w-4 h-4" />
+                  {reservationSort === 'asc' ? 'Soonest first' : 'Latest first'}
+                </button>
+              </div>
+            )}
+
             {/* Reservations List */}
             {reservations.length === 0 ? (
               <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-8 sm:p-12 text-center">
@@ -1596,9 +1677,17 @@ function App() {
                 <h3 className="text-lg sm:text-xl font-semibold text-gray-700 mb-2">No Reservations Yet</h3>
                 <p className="text-gray-400 text-sm sm:text-base">Add your first reservation to get started!</p>
               </div>
+            ) : filteredReservations.length === 0 ? (
+              <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-8 sm:p-12 text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-blue-50 mb-4">
+                  <Calendar className="w-8 h-8 sm:w-10 sm:h-10 text-blue-400" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-semibold text-gray-700 mb-2">No Matches</h3>
+                <p className="text-gray-400 text-sm sm:text-base">Nothing in this filter — try "All" instead.</p>
+              </div>
             ) : (
               <div className="grid gap-3 sm:gap-4">
-                {reservations.map(reservation => {
+                {filteredReservations.map(reservation => {
                   const depositAmount = reservation.depositAmount
                   const checkInDate = new Date(reservation.checkIn)
                   const oneWeekBefore = new Date(checkInDate)
@@ -1743,6 +1832,97 @@ function App() {
                 })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Calendar Tab */}
+        {activeTab === 'calendar' && (
+          <div className="space-y-4 sm:space-y-6">
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <button
+                  onClick={() => setCalendarMonth(m => {
+                    const d = new Date(m)
+                    d.setMonth(d.getMonth() - 1)
+                    return d
+                  })}
+                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-all"
+                  aria-label="Previous month"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-800">
+                  {calendarMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                </h3>
+                <button
+                  onClick={() => setCalendarMonth(m => {
+                    const d = new Date(m)
+                    d.setMonth(d.getMonth() + 1)
+                    return d
+                  })}
+                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-all"
+                  aria-label="Next month"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                  <div key={d} className="text-center text-xs font-semibold text-gray-400 py-1">{d}</div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 sm:gap-2">
+                {buildCalendarGrid(calendarMonth).map((date, i) => {
+                  if (!date) return <div key={`empty-${i}`} />
+                  const dayReservations = getReservationsForDay(date)
+                  const isToday = date.toDateString() === new Date().toDateString()
+                  return (
+                    <div
+                      key={date.toISOString()}
+                      className={`min-h-16 sm:min-h-24 rounded-lg sm:rounded-xl border p-1 sm:p-1.5 ${
+                        isToday ? 'border-blue-400 bg-blue-50/50' : 'border-gray-100'
+                      }`}
+                    >
+                      <div className={`text-xs font-medium mb-1 ${isToday ? 'text-blue-600' : 'text-gray-400'}`}>
+                        {date.getDate()}
+                      </div>
+                      <div className="space-y-0.5">
+                        {dayReservations.slice(0, 3).map(r => (
+                          <button
+                            key={r.id}
+                            onClick={() => {
+                              handleEditReservation(r)
+                              setActiveTab('reservations')
+                            }}
+                            title={`${r.guestName} — ${r.checkIn} to ${r.checkOut}`}
+                            className={`block w-full text-left px-1 sm:px-1.5 py-0.5 rounded text-[10px] sm:text-xs truncate transition-all ${
+                              r.fullPaymentPaid
+                                ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                : r.depositPaid
+                                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                  : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                            }`}
+                          >
+                            {r.guestName}
+                          </button>
+                        ))}
+                        {dayReservations.length > 3 && (
+                          <div className="text-[10px] text-gray-400 px-1">+{dayReservations.length - 3} more</div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="flex flex-wrap gap-3 sm:gap-4 mt-4 sm:mt-6 pt-4 border-t border-gray-100 text-xs text-gray-500">
+                <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span> Fully paid</div>
+                <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-400"></span> Deposit paid</div>
+                <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Unpaid</div>
+              </div>
+            </div>
           </div>
         )}
 
