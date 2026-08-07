@@ -1647,8 +1647,8 @@ function App() {
 
             {/* Filter + Sort */}
             {reservations.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                <div className="bg-white rounded-xl shadow-md p-1 flex gap-1 flex-1 sm:flex-none">
+              <div className="flex items-center gap-1.5 sm:gap-3">
+                <div className="bg-white rounded-xl shadow-md p-1 flex gap-1 flex-1 min-w-0">
                   {[
                     { id: 'all', label: 'All' },
                     { id: 'upcoming', label: 'Upcoming' },
@@ -1657,7 +1657,7 @@ function App() {
                     <button
                       key={f.id}
                       onClick={() => setReservationFilter(f.id)}
-                      className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                      className={`flex-1 min-w-0 px-1.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 truncate ${
                         reservationFilter === f.id
                           ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow'
                           : 'text-gray-600 hover:bg-gray-100'
@@ -1669,11 +1669,12 @@ function App() {
                 </div>
                 <button
                   onClick={() => setReservationSort(reservationSort === 'asc' ? 'desc' : 'asc')}
-                  className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 bg-white rounded-xl shadow-md text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all duration-300"
+                  className="flex-shrink-0 flex items-center gap-1.5 px-2.5 sm:px-4 py-2.5 bg-white rounded-xl shadow-md text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all duration-300"
                   title={reservationSort === 'asc' ? 'Soonest first' : 'Latest first'}
+                  aria-label={reservationSort === 'asc' ? 'Soonest first' : 'Latest first'}
                 >
                   <ArrowUpDown className="w-4 h-4" />
-                  {reservationSort === 'asc' ? 'Soonest first' : 'Latest first'}
+                  <span className="hidden sm:inline">{reservationSort === 'asc' ? 'Soonest first' : 'Latest first'}</span>
                 </button>
               </div>
             )}
@@ -1848,20 +1849,20 @@ function App() {
         {/* Calendar Tab */}
         {activeTab === 'calendar' && (
           <div className="space-y-4 sm:space-y-6">
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6">
-              <div className="flex items-center justify-between mb-4 sm:mb-6">
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-2.5 sm:p-6 overflow-hidden">
+              <div className="flex items-center justify-between mb-3 sm:mb-6">
                 <button
                   onClick={() => setCalendarMonth(m => {
                     const d = new Date(m)
                     d.setMonth(d.getMonth() - 1)
                     return d
                   })}
-                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-all"
+                  className="p-1.5 sm:p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-all flex-shrink-0"
                   aria-label="Previous month"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-                <h3 className="text-lg sm:text-xl font-bold text-gray-800">
+                <h3 className="text-sm sm:text-xl font-bold text-gray-800 truncate px-1">
                   {calendarMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
                 </h3>
                 <button
@@ -1870,20 +1871,23 @@ function App() {
                     d.setMonth(d.getMonth() + 1)
                     return d
                   })}
-                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-all"
+                  className="p-1.5 sm:p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-all flex-shrink-0"
                   aria-label="Next month"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
+              <div className="grid grid-cols-7 gap-0.5 sm:gap-2 mb-1 sm:mb-2">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                  <div key={d} className="text-center text-xs font-semibold text-gray-400 py-1">{d}</div>
+                  <div key={d} className="text-center text-[10px] sm:text-xs font-semibold text-gray-400 py-1">
+                    <span className="sm:hidden">{d[0]}</span>
+                    <span className="hidden sm:inline">{d}</span>
+                  </div>
                 ))}
               </div>
 
-              <div className="grid grid-cols-7 gap-1 sm:gap-2">
+              <div className="grid grid-cols-7 gap-0.5 sm:gap-2">
                 {buildCalendarGrid(calendarMonth).map((date, i) => {
                   if (!date) return <div key={`empty-${i}`} />
                   const dayReservations = getReservationsForDay(date)
@@ -1891,15 +1895,15 @@ function App() {
                   return (
                     <div
                       key={date.toISOString()}
-                      className={`min-h-16 sm:min-h-24 rounded-lg sm:rounded-xl border p-1 sm:p-1.5 ${
+                      className={`min-h-12 sm:min-h-24 rounded sm:rounded-xl border p-0.5 sm:p-1.5 overflow-hidden ${
                         isToday ? 'border-blue-400 bg-blue-50/50' : 'border-gray-100'
                       }`}
                     >
-                      <div className={`text-xs font-medium mb-1 ${isToday ? 'text-blue-600' : 'text-gray-400'}`}>
+                      <div className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${isToday ? 'text-blue-600' : 'text-gray-400'}`}>
                         {date.getDate()}
                       </div>
                       <div className="space-y-0.5">
-                        {dayReservations.slice(0, 3).map(r => (
+                        {dayReservations.slice(0, 2).map(r => (
                           <button
                             key={r.id}
                             onClick={() => {
@@ -1907,7 +1911,7 @@ function App() {
                               setActiveTab('reservations')
                             }}
                             title={`${r.guestName} — ${r.checkIn} to ${r.checkOut}`}
-                            className={`block w-full text-left px-1 sm:px-1.5 py-0.5 rounded text-[10px] sm:text-xs truncate transition-all ${
+                            className={`block w-full text-left px-0.5 sm:px-1.5 py-0.5 rounded text-[8px] sm:text-xs leading-tight truncate transition-all ${
                               r.fullPaymentPaid
                                 ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                                 : r.depositPaid
@@ -1918,8 +1922,8 @@ function App() {
                             {r.guestName}
                           </button>
                         ))}
-                        {dayReservations.length > 3 && (
-                          <div className="text-[10px] text-gray-400 px-1">+{dayReservations.length - 3} more</div>
+                        {dayReservations.length > 2 && (
+                          <div className="text-[8px] sm:text-[10px] text-gray-400 px-0.5">+{dayReservations.length - 2}</div>
                         )}
                       </div>
                     </div>
