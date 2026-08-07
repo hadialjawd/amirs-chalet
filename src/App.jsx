@@ -1697,7 +1697,7 @@ function App() {
                 <p className="text-gray-400 text-sm sm:text-base">Nothing in this filter — try "All" instead.</p>
               </div>
             ) : (
-              <div className="grid gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4">
                 {filteredReservations.map(reservation => {
                   const depositAmount = reservation.depositAmount
                   const checkInDate = new Date(reservation.checkIn)
@@ -2040,7 +2040,7 @@ function App() {
                 <p className="text-gray-400 text-sm sm:text-base">Track your expenses to see where your money goes!</p>
               </div>
             ) : (
-              <div className="grid gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4">
                 {expenses.map(expense => {
                   const CategoryIcon = getCategoryIcon(expense.category)
                   return (
