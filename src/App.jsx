@@ -625,6 +625,8 @@ function App() {
   const totalIncome = reservations.reduce((sum, r) => sum + getReceivedAmount(r), 0)
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0)
   const netProfit = totalIncome - totalExpenses
+  // Money still owed across all bookings — deposits/balances not collected yet
+  const upcomingIncome = reservations.reduce((sum, r) => sum + getRemainingBalance(r), 0)
 
   // Reservations tab: filter + sort
   const todayStart = new Date()
@@ -767,6 +769,7 @@ function App() {
       `Total Income: $${totalIncome.toLocaleString()}`,
       `Total Expenses: $${totalExpenses.toLocaleString()}`,
       `Net Profit: $${netProfit.toLocaleString()}`,
+      `Upcoming Income: $${upcomingIncome.toLocaleString()}`,
       '',
       '--- RESERVATIONS ---',
       'Guest Name,Phone,Check-In,Check-Out,Guests,Price/Night,Nights,Total',
@@ -1404,7 +1407,7 @@ function App() {
 
       {/* Summary Cards */}
       <div className="max-w-7xl mx-auto px-3 sm:px-4 mt-4 sm:mt-6 relative z-10">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 border border-emerald-100">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
@@ -1448,6 +1451,21 @@ function App() {
               </div>
             </div>
             <p className="text-gray-400 text-xs mt-2 sm:mt-3">📊 Income - Expenses</p>
+          </div>
+
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 border border-amber-100">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-gray-500 text-xs sm:text-sm font-medium">Upcoming Income</p>
+                <p className="text-2xl sm:text-3xl font-bold text-amber-600 mt-1 truncate">
+                  ${upcomingIncome.toLocaleString()}
+                </p>
+              </div>
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg flex-shrink-0 ml-2">
+                <Clock className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
+              </div>
+            </div>
+            <p className="text-gray-400 text-xs mt-2 sm:mt-3">⏳ Still owed across all bookings</p>
           </div>
         </div>
       </div>
