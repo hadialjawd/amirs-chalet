@@ -81,7 +81,7 @@ export async function changePassword(newPassword) {
 // ============ RESERVATIONS ============
 
 export async function getReservations() {
-  const empty = { reservations: [], calendarSync: { imported: [], skipped: [] } };
+  const empty = { reservations: [], calendarSync: { imported: [], skipped: [], deleted: [] } };
   try {
     const res = await apiFetch('/api/reservations');
     if (!res.ok) return empty;

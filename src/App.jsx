@@ -226,8 +226,11 @@ function App() {
         const first = calendarSync.skipped[0]
         const more = calendarSync.skipped.length > 1 ? ` (+${calendarSync.skipped.length - 1} more)` : ''
         showToast(`⚠️ Skipped "${first.summary}" from Google Calendar — ${first.reason}${more}`, 'error')
-      } else if (calendarSync?.imported?.length) {
-        showToast(`Imported ${calendarSync.imported.length} booking(s) from Google Calendar: ${calendarSync.imported.join(', ')}`, 'success')
+      } else {
+        const parts = []
+        if (calendarSync?.imported?.length) parts.push(`imported ${calendarSync.imported.join(', ')}`)
+        if (calendarSync?.deleted?.length) parts.push(`removed ${calendarSync.deleted.join(', ')} (deleted from Calendar)`)
+        if (parts.length) showToast(`Google Calendar sync: ${parts.join('; ')}`, 'success')
       }
     } catch (error) {
       console.error('Error loading data:', error)

@@ -39,19 +39,33 @@ function eventDate(point) {
   return point.date || (point.dateTime ? point.dateTime.slice(0, 10) : null)
 }
 
-// Pulls in any event added directly in Google Calendar that isn't already
-// linked to a reservation. Never throws — a Calendar hiccup must not block
-// the app from loading its own data.
+// Two-way reconcile: pulls in any event added directly in Google Calendar
+// that isn't already linked to a reservation, AND deletes any reservation
+// whose linked event no longer exists there (mirrors the calendar exactly —
+// if you delete it in Calendar by mistake, you just re-add it). Never
+// throws — a Calendar hiccup must not block the app from loading its own
+// data, and critically must not be mistaken for "everything was deleted"
+// (see the comment on listCalendarEvents).
 async function reconcileFromCalendar(client) {
   const imported = []
   const skipped = []
+  const deleted = []
   try {
     const known = await client.execute(
-      "SELECT google_event_id FROM reservations WHERE google_event_id IS NOT NULL AND google_event_id != ''"
+      "SELECT id, guest_name, google_event_id FROM reservations WHERE google_event_id IS NOT NULL AND google_event_id != ''"
     )
-    const knownIds = new Set(known.rows.map(r => r.google_event_id))
+    const knownByEventId = new Map(known.rows.map(r => [r.google_event_id, r]))
 
     const events = await listCalendarEvents()
+    const liveEventIds = new Set(events.filter(e => e.id && e.status !== 'cancelled').map(e => e.id))
+
+    for (const [eventId, row] of knownByEventId) {
+      if (!liveEventIds.has(eventId)) {
+        await client.execute({ sql: 'DELETE FROM reservations WHERE id = ?', args: [row.id] })
+        deleted.push(row.guest_name)
+      }
+    }
+
     const depositSetting = await client.execute({
       sql: "SELECT value FROM settings WHERE key = 'deposit_percent'",
       args: [],
@@ -59,7 +73,7 @@ async function reconcileFromCalendar(client) {
     const depositPercent = depositSetting.rows.length > 0 ? Number(depositSetting.rows[0].value) : 50
 
     for (const event of events) {
-      if (!event.id || knownIds.has(event.id) || event.status === 'cancelled') continue
+      if (!event.id || knownByEventId.has(event.id) || event.status === 'cancelled') continue
 
       const checkIn = eventDate(event.start)
       const checkOut = eventDate(event.end)
@@ -95,8 +109,9 @@ async function reconcileFromCalendar(client) {
     }
   } catch (error) {
     console.error('Error reconciling from Google Calendar:', error)
+    return { imported: [], skipped: [], deleted: [] }
   }
-  return { imported, skipped }
+  return { imported, skipped, deleted }
 }
 
 export default async function handler(req, res) {

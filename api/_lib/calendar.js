@@ -93,30 +93,27 @@ export async function updateCalendarEvent(eventId, reservation) {
   }
 }
 
-// Lists upcoming-ish events so reservations.js can pick up anything added
-// directly in Google Calendar. Returns [] on any failure — a Calendar hiccup
-// must never block the app from loading its own reservations.
+// Lists every event in the calendar so reservations.js can both pick up
+// anything added directly in Google Calendar AND notice anything removed
+// there. Unlike the other functions here, this one THROWS on failure rather
+// than swallowing it — the caller uses "no events" to infer "these
+// reservations were deleted," so a failed API call must never be mistaken
+// for a genuinely empty calendar (that would wipe out every synced
+// reservation). No timeMin: reservations can be edited/deleted from the
+// calendar side regardless of how far in the past or future they are.
 export async function listCalendarEvents() {
-  try {
-    const accessToken = await getAccessToken();
-    const timeMin = new Date(Date.now() - 1000 * 60 * 60 * 24 * 180).toISOString();
-    const url = new URL(EVENTS_URL());
-    url.searchParams.set('singleEvents', 'true');
-    url.searchParams.set('orderBy', 'startTime');
-    url.searchParams.set('timeMin', timeMin);
-    url.searchParams.set('maxResults', '250');
-    url.searchParams.set('fields', 'items(id,summary,start,end,status)');
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!res.ok) {
-      console.error('Google Calendar list failed:', res.status, await res.text());
-      return [];
-    }
-    const data = await res.json();
-    return data.items || [];
-  } catch (error) {
-    console.error('Google Calendar list error:', error);
-    return [];
+  const accessToken = await getAccessToken();
+  const url = new URL(EVENTS_URL());
+  url.searchParams.set('singleEvents', 'true');
+  url.searchParams.set('orderBy', 'startTime');
+  url.searchParams.set('maxResults', '250');
+  url.searchParams.set('fields', 'items(id,summary,start,end,status)');
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) {
+    throw new Error(`Google Calendar list failed: ${res.status} ${await res.text()}`);
   }
+  const data = await res.json();
+  return data.items || [];
 }
 
 export async function deleteCalendarEvent(eventId) {
